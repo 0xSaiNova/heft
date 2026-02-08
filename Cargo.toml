@@ -1,0 +1,29 @@
+[package]
+name = "heft"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "A disk space auditor for developers that identifies reclaimable build artifacts, caches, and container data"
+license = "MIT"
+repository = "https://github.com/0xSaiNova/heft"
+keywords = ["disk", "cleanup", "docker", "cache", "developer-tools"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+# cli argument parsing with derive macros for declarative subcommand definitions
+# standard library has no argument parsing, clap is the de facto choice
+clap = { version = "4", features = ["derive"] }
+
+# serialization framework needed for json output and future sqlite storage
+# BloatEntry and related types need to serialize for both use cases
+serde = { version = "1", features = ["derive"] }
+
+# json serialization for --json output flag
+# serde alone doesn't include a format, serde_json is the standard json backend
+serde_json = "1"
+
+[dev-dependencies]
+
+[[bin]]
+name = "heft"
+path = "src/main.rs"

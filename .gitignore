@@ -1,0 +1,16 @@
+/target
+*.swp
+*.swo
+.DS_Store
+*.db
+*.sqlite
+.env
+.env.*
+.idea/
+.vscode/
+*.iml
+claude.md
+project-setup-spec.md
+proj\ docs/
+docs/spec/
+docs/internal/
