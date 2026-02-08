@@ -22,6 +22,10 @@ serde = { version = "1", features = ["derive"] }
 # serde alone doesn't include a format, serde_json is the standard json backend
 serde_json = "1"
 
+# filesystem traversal with iterator interface
+# std::fs::read_dir is too low level, walkdir handles recursion and symlink policy
+walkdir = "2"
+
 [dev-dependencies]
 
 [[bin]]
