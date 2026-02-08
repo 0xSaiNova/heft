@@ -1,31 +1,39 @@
 # heft
 
-A disk space auditor for developers that shows where your space went and how much you can safely reclaim.
+Shows you where your disk space went and what you can delete.
 
-## The Problem
+## why
 
-Developer workstations accumulate disk bloat silently. Docker images pile up, node_modules multiply across abandoned projects, cargo targets grow unbounded, package manager caches swell in hidden directories. A typical polyglot developer can lose 40-80 GB to reclaimable junk without realizing it.
+If youve ever run out of disk space and spent an hour figuring out what to delete, this is for you. node_modules from projects you forgot about, cargo target directories that somehow grew to 5gb, python venvs everywhere. Its always the same stuff but you have to hunt for it every time.
 
-## Status
+heft finds it all in one scan.
 
-Early development. Not yet usable. The project skeleton exists but core functionality is being implemented.
+## status
 
-## Building
+Work in progress. The project artifact scanner works. Cache detection and docker support coming next.
+
+## usage
+
+```
+heft scan --roots ~/code
+```
+
+Finds node_modules, cargo targets, python venvs, pycache, gradle builds, xcode deriveddata, go vendor dirs. Shows you the size of each and which ones are safe to delete.
+
+## building
 
 ```
 cargo build
 cargo test
 ```
 
-## Roadmap
+## whats next
 
-- [ ] v0.1 — Project and cache detectors, TUI table output
-- [ ] v0.2 — Docker detector
-- [ ] v0.3 — Cleanup engine with dry run
-- [ ] v0.4 — SQLite snapshots and diff
-- [ ] v0.5 — JSON output, config file, polish
-- [ ] v1.0 — Stable release, cross platform, published
+- cache detector (npm, pip, cargo, homebrew caches)
+- docker detector (images, volumes, build cache)
+- cleanup command with dry run
+- snapshot history so you can see what grew back
 
-## License
+## license
 
 MIT
