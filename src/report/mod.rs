@@ -21,7 +21,7 @@ pub fn print(result: &ScanResult) {
     if !result.diagnostics.is_empty() {
         println!();
         for diagnostic in &result.diagnostics {
-            println!("[diagnostic] {}", diagnostic);
+            println!("[diagnostic] {diagnostic}");
         }
     }
 }
