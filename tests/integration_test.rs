@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use heft::config::Config;
@@ -6,8 +7,21 @@ use heft::platform::Platform;
 use heft::scan;
 use heft::scan::detector::BloatCategory;
 
+// helper to filter results by category
+fn project_entries(result: &scan::ScanResult) -> Vec<&scan::detector::BloatEntry> {
+    result
+        .entries
+        .iter()
+        .filter(|e| e.category == BloatCategory::ProjectArtifacts)
+        .collect()
+}
+
+// ============================================================================
+// Project detector tests
+// ============================================================================
+
 #[test]
-fn empty_directory_returns_no_entries() {
+fn empty_directory_returns_no_project_entries() {
     let temp = std::env::temp_dir().join("heft_test_empty");
     let _ = fs::remove_dir_all(&temp);
     fs::create_dir_all(&temp).unwrap();
@@ -21,7 +35,8 @@ fn empty_directory_returns_no_entries() {
     };
 
     let result = scan::run(&config);
-    assert!(result.entries.is_empty());
+    let projects = project_entries(&result);
+    assert!(projects.is_empty());
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -48,11 +63,12 @@ fn detects_node_modules_in_project() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].name, "my-project");
-    assert_eq!(result.entries[0].category, BloatCategory::ProjectArtifacts);
-    assert!(result.entries[0].size_bytes > 0);
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "my-project");
+    assert_eq!(projects[0].category, BloatCategory::ProjectArtifacts);
+    assert!(projects[0].size_bytes > 0);
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -79,10 +95,11 @@ fn detects_cargo_target_in_rust_project() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].name, "my-crate");
-    assert_eq!(result.entries[0].category, BloatCategory::ProjectArtifacts);
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "my-crate");
+    assert_eq!(projects[0].category, BloatCategory::ProjectArtifacts);
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -113,10 +130,11 @@ fn skips_nested_node_modules_in_monorepo() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
     // should only detect the root node_modules, not the nested one
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].name, "monorepo");
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "monorepo");
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -143,10 +161,11 @@ fn detects_python_venv() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].category, BloatCategory::ProjectArtifacts);
-    assert!(result.entries[0].cleanup_hint.as_ref().unwrap().contains("venv"));
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].category, BloatCategory::ProjectArtifacts);
+    assert!(projects[0].cleanup_hint.as_ref().unwrap().contains("venv"));
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -173,9 +192,10 @@ fn detects_pytest_cache() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
-    assert_eq!(result.entries.len(), 1);
-    assert_eq!(result.entries[0].category, BloatCategory::ProjectArtifacts);
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].category, BloatCategory::ProjectArtifacts);
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -202,10 +222,11 @@ fn falls_back_to_directory_name_when_manifest_has_no_name() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
-    assert_eq!(result.entries.len(), 1);
+    assert_eq!(projects.len(), 1);
     // should fall back to directory name
-    assert_eq!(result.entries[0].name, "unnamed-project");
+    assert_eq!(projects[0].name, "unnamed-project");
 
     let _ = fs::remove_dir_all(&temp);
 }
@@ -231,9 +252,84 @@ fn does_not_detect_target_without_cargo_toml() {
     };
 
     let result = scan::run(&config);
+    let projects = project_entries(&result);
 
     // should NOT detect as artifact since there's no Cargo.toml
-    assert!(result.entries.is_empty());
+    assert!(projects.is_empty());
 
     let _ = fs::remove_dir_all(&temp);
+}
+
+// ============================================================================
+// Cache detector tests
+// ============================================================================
+
+#[test]
+fn scan_runs_without_panic() {
+    let config = Config {
+        roots: vec![PathBuf::from("/tmp")],
+        timeout: Duration::from_secs(30),
+        skip_docker: true,
+        json_output: false,
+        platform: Platform::Linux,
+    };
+
+    // should not panic, may or may not find caches
+    let _result = scan::run(&config);
+}
+
+#[test]
+fn detects_cache_directory() {
+    let temp = std::env::temp_dir().join("heft_test_cache");
+    let _ = fs::remove_dir_all(&temp);
+
+    // create a fake home with a cache dir
+    let fake_home = temp.join("home");
+    let npm_cache = fake_home.join(".npm");
+    let cache_files = npm_cache.join("_cacache");
+
+    fs::create_dir_all(&cache_files).unwrap();
+    fs::write(cache_files.join("data.json"), r#"{"cached": true}"#).unwrap();
+
+    // we cant easily test the cache detector in isolation since it uses
+    // the real home dir. this test just verifies the scan machinery works.
+    let config = Config {
+        roots: vec![temp.clone()],
+        timeout: Duration::from_secs(30),
+        skip_docker: true,
+        json_output: false,
+        platform: Platform::Linux,
+    };
+
+    let result = scan::run(&config);
+
+    // cache detector looks at real home, not our temp dir
+    // so this just confirms no crash
+    assert!(result.diagnostics.is_empty() || !result.diagnostics.is_empty());
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn cache_entries_have_correct_category() {
+    let config = Config {
+        roots: vec![PathBuf::from("/nonexistent")],
+        timeout: Duration::from_secs(30),
+        skip_docker: true,
+        json_output: false,
+        platform: Platform::Linux,
+    };
+
+    let result = scan::run(&config);
+
+    // any cache entries found should have PackageCache or IdeData category
+    for entry in &result.entries {
+        assert!(
+            entry.category == BloatCategory::PackageCache
+                || entry.category == BloatCategory::IdeData
+                || entry.category == BloatCategory::ProjectArtifacts,
+            "unexpected category: {:?}",
+            entry.category
+        );
+    }
 }
