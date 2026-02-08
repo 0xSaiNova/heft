@@ -11,7 +11,7 @@ fn main() {
         Command::Scan(args) => {
             let config = Config::from_scan_args(&args);
             let result = scan::run(&config);
-            report::print(&result);
+            report::print(&result, &config);
         }
         Command::Report(args) => {
             println!("report: snapshot_id={:?}, json={}", args.id, args.json);
