@@ -30,4 +30,19 @@ impl Config {
             platform,
         }
     }
+
+    pub fn default() -> Self {
+        let platform = platform::detect();
+        let roots = platform::home_dir()
+            .map(|h| vec![h])
+            .unwrap_or_default();
+
+        Config {
+            roots,
+            timeout: Duration::from_secs(30),
+            skip_docker: false,
+            json_output: false,
+            platform,
+        }
+    }
 }
