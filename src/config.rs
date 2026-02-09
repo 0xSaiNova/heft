@@ -9,6 +9,7 @@ pub struct Config {
     pub timeout: Duration,
     pub skip_docker: bool,
     pub json_output: bool,
+    pub verbose: bool,
     pub platform: Platform,
 }
 
@@ -27,6 +28,7 @@ impl Config {
             timeout: Duration::from_secs(args.timeout),
             skip_docker: args.no_docker,
             json_output: args.json,
+            verbose: args.verbose,
             platform,
         }
     }
@@ -42,6 +44,7 @@ impl Config {
             timeout: Duration::from_secs(30),
             skip_docker: false,
             json_output: false,
+            verbose: false,
             platform,
         }
     }

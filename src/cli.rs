@@ -42,6 +42,10 @@ pub struct ScanArgs {
     /// Per-detector timeout in seconds
     #[arg(long, default_value_t = 30)]
     pub timeout: u64,
+
+    /// Show detailed output including diagnostics
+    #[arg(long, short = 'v', default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(Parser)]
