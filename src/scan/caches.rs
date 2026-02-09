@@ -175,22 +175,46 @@ fn get_cache_locations(home: &Path, platform: Platform) -> Vec<CacheLocation> {
 }
 
 fn get_homebrew_cache() -> Option<PathBuf> {
-    let output = Command::new("brew")
+    use std::time::Duration;
+    use std::process::Stdio;
+    use std::io::Read;
+
+    let mut child = Command::new("brew")
         .arg("--cache")
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .ok()?;
 
-    if !output.status.success() {
-        return None;
-    }
+    // wait with a 5 second timeout
+    let timeout = Duration::from_secs(5);
+    let start = std::time::Instant::now();
 
-    let path_str = String::from_utf8(output.stdout).ok()?;
-    let path = PathBuf::from(path_str.trim());
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
 
-    if path.exists() {
-        Some(path)
-    } else {
-        None
+                let mut output = String::new();
+                if let Some(mut stdout) = child.stdout.take() {
+                    stdout.read_to_string(&mut output).ok()?;
+                }
+                let path = PathBuf::from(output.trim());
+
+                return if path.exists() { Some(path) } else { None };
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    // timeout reached, kill the process
+                    let _ = child.kill();
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(_) => return None,
+        }
     }
 }
 
