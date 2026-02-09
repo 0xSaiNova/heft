@@ -156,17 +156,31 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
             manifest_file: Some("composer.json"),
         }),
 
-        ".gradle" | "build" if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() => {
+        ".gradle" if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() => {
             Some(ArtifactType {
                 cleanup_hint: "safe to delete, rebuild with gradle build",
                 manifest_file: None,
             })
         }
 
-        "DerivedData" => Some(ArtifactType {
-            cleanup_hint: "xcode build artifacts, safe to delete",
-            manifest_file: None,
-        }),
+        // only flag "build" dirs as gradle if they actually contain gradle artifacts
+        // prevents false positives on legitimate build folders used for other purposes
+        "build" if (parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists())
+                && is_gradle_build_dir(path) => {
+            Some(ArtifactType {
+                cleanup_hint: "safe to delete, rebuild with gradle build",
+                manifest_file: None,
+            })
+        }
+
+        // only flag DerivedData if it's actually from xcode
+        // check for xcode markers or being in the xcode cache location
+        "DerivedData" if is_xcode_derived_data(path, parent) => {
+            Some(ArtifactType {
+                cleanup_hint: "xcode build artifacts, safe to delete",
+                manifest_file: None,
+            })
+        }
 
         _ => None,
     }
@@ -186,6 +200,55 @@ fn is_inside_installed_packages(path: &Path) -> bool {
             .map(|s| matches!(s, "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"))
             .unwrap_or(false)
     })
+}
+
+// verify a "build" directory actually contains gradle artifacts, not just any folder named build.
+// checks for typical gradle output directories to avoid false positives.
+fn is_gradle_build_dir(path: &Path) -> bool {
+    path.join("classes").exists()
+        || path.join("libs").exists()
+        || path.join("tmp").exists()
+        || path.join("generated").exists()
+        || path.join("intermediates").exists()
+}
+
+// verify a "DerivedData" directory is actually from xcode, not just any folder with that name.
+// checks for xcode-specific markers or being in the standard xcode cache location.
+fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
+    // check if in standard xcode cache location (~/Library/Developer/Xcode/DerivedData)
+    let in_xcode_cache = path.ancestors().any(|ancestor| {
+        ancestor.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s == "Xcode")
+            .unwrap_or(false)
+            && ancestor.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .map(|s| s == "Developer")
+                .unwrap_or(false)
+    });
+
+    // check for xcode project file in parent directories
+    let has_xcode_project = parent.ancestors().any(|ancestor| {
+        if let Ok(entries) = std::fs::read_dir(ancestor) {
+            entries.flatten().any(|e| {
+                e.path().extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|s| s == "xcodeproj" || s == "xcworkspace")
+                    .unwrap_or(false)
+            })
+        } else {
+            false
+        }
+    });
+
+    // check for xcode-specific subdirectories in DerivedData
+    let has_xcode_markers = path.join("Build").exists()
+        || path.join("Logs").exists()
+        || path.join("ModuleCache").exists()
+        || path.join("info.plist").exists();
+
+    in_xcode_cache || has_xcode_project || has_xcode_markers
 }
 
 // we skip hidden directories during traversal, but some artifacts we care about
