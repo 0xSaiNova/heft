@@ -227,13 +227,19 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
                 }
 
                 let mut output = String::new();
-                if let Some(mut stdout) = child.stdout.take() {
-                    if let Err(e) = stdout.read_to_string(&mut output) {
-                        return Err(format!("failed to read brew output: {}", e));
-                    }
-                }
-                let path = PathBuf::from(output.trim());
+                let mut stdout = child.stdout.take()
+                    .ok_or_else(|| "failed to capture brew stdout".to_string())?;
 
+                if let Err(e) = stdout.read_to_string(&mut output) {
+                    return Err(format!("failed to read brew output: {}", e));
+                }
+
+                let path_str = output.trim();
+                if path_str.is_empty() {
+                    return Err("brew returned empty output".to_string());
+                }
+
+                let path = PathBuf::from(path_str);
                 if path.exists() {
                     return Ok(Some(path));
                 } else {
