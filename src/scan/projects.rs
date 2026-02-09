@@ -82,7 +82,7 @@ fn scan_directory(
             }
 
             match calculate_dir_size(path) {
-                Ok(size) => {
+                Ok((size, warnings)) => {
                     let project_name = determine_project_name(project_root, &artifact);
                     let last_modified = get_source_last_modified(project_root);
 
@@ -98,6 +98,10 @@ fn scan_directory(
 
                     seen_projects.insert(project_root.to_path_buf());
                     seen_artifacts.insert(path.to_path_buf());
+
+                    for warning in warnings {
+                        diagnostics.push(format!("{} (size may be underestimated)", warning));
+                    }
                 }
                 Err(e) => {
                     diagnostics.push(format!("failed to calculate size of {}: {}", path.display(), e));
@@ -197,18 +201,39 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
         .unwrap_or(false)
 }
 
-fn calculate_dir_size(path: &Path) -> Result<u64, std::io::Error> {
+fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error> {
     let mut total = 0u64;
+    let mut warnings = Vec::new();
+    let mut overflowed = false;
 
-    for entry in WalkDir::new(path).follow_links(false).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total += metadata.len();
+    for entry in WalkDir::new(path).follow_links(false).into_iter() {
+        match entry {
+            Ok(entry) => {
+                if entry.file_type().is_file() {
+                    if let Ok(metadata) = entry.metadata() {
+                        let file_size = metadata.len();
+                        match total.checked_add(file_size) {
+                            Some(new_total) => total = new_total,
+                            None => {
+                                if !overflowed {
+                                    warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
+                                    overflowed = true;
+                                }
+                                total = u64::MAX;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
+                    warnings.push(format!("permission denied: {}", e.path().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown path".to_string())));
+                }
             }
         }
     }
 
-    Ok(total)
+    Ok((total, warnings))
 }
 
 fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> String {
