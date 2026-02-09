@@ -176,12 +176,12 @@ fn has_python_project(dir: &Path) -> bool {
 }
 
 fn is_inside_installed_packages(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.contains("site-packages")
-        || path_str.contains("dist-packages")
-        || path_str.contains("node_modules")
-        || path_str.contains(".venv")
-        || path_str.contains("/venv/")
+    path.ancestors().any(|ancestor| {
+        ancestor.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| matches!(s, "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"))
+            .unwrap_or(false)
+    })
 }
 
 // we skip hidden directories during traversal, but some artifacts we care about
@@ -240,21 +240,10 @@ fn read_project_name_from_manifest(path: &Path) -> Option<String> {
     }
 }
 
-// pulls a string field out of json without a full parser. good enough for
-// grabbing "name" from a package.json, not meant for complex cases.
+// extracts a field from json using proper parsing to handle escaped characters
 fn extract_json_field(content: &str, field: &str) -> Option<String> {
-    let pattern = format!("\"{field}\"");
-    let start = content.find(&pattern)?;
-    let after_key = &content[start + pattern.len()..];
-    let colon_pos = after_key.find(':')?;
-    let after_colon = after_key[colon_pos + 1..].trim_start();
-
-    if !after_colon.starts_with('"') {
-        return None;
-    }
-
-    let value_end = after_colon[1..].find('"')?;
-    Some(after_colon[1..1 + value_end].to_string())
+    let parsed: serde_json::Value = serde_json::from_str(content).ok()?;
+    parsed.get(field)?.as_str().map(|s| s.to_string())
 }
 
 fn extract_toml_package_name(content: &str) -> Option<String> {
