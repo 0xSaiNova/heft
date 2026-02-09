@@ -216,16 +216,17 @@ fn is_gradle_build_dir(path: &Path) -> bool {
 // checks for xcode-specific markers or being in the standard xcode cache location.
 fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
     // check if in standard xcode cache location (~/Library/Developer/Xcode/DerivedData)
+    // fixed: properly check if ancestor named "Xcode" has parent named "Developer"
     let in_xcode_cache = path.ancestors().any(|ancestor| {
-        ancestor.file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s == "Xcode")
-            .unwrap_or(false)
-            && ancestor.parent()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .map(|s| s == "Developer")
-                .unwrap_or(false)
+        if let (Some(name), Some(parent)) = (ancestor.file_name(), ancestor.parent()) {
+            name.to_str() == Some("Xcode")
+                && parent.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s == "Developer")
+                    .unwrap_or(false)
+        } else {
+            false
+        }
     });
 
     // check for xcode project file in parent directories
