@@ -31,6 +31,7 @@ fn empty_directory_returns_no_project_entries() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -59,6 +60,7 @@ fn detects_node_modules_in_project() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -91,6 +93,7 @@ fn detects_cargo_target_in_rust_project() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -126,6 +129,7 @@ fn skips_nested_node_modules_in_monorepo() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -157,6 +161,7 @@ fn detects_python_venv() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -188,6 +193,7 @@ fn detects_pytest_cache() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -218,6 +224,7 @@ fn falls_back_to_directory_name_when_manifest_has_no_name() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -248,6 +255,7 @@ fn does_not_detect_target_without_cargo_toml() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -271,6 +279,7 @@ fn scan_runs_without_panic() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -298,6 +307,7 @@ fn detects_cache_directory() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
@@ -317,6 +327,7 @@ fn cache_entries_have_correct_category() {
         timeout: Duration::from_secs(30),
         skip_docker: true,
         json_output: false,
+        verbose: false,
         platform: Platform::Linux,
     };
 
