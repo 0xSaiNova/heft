@@ -91,8 +91,24 @@ fn delete_entry(entry: &BloatEntry) -> Result<String, String> {
 }
 
 fn delete_filesystem_path(path: &Path) -> Result<String, String> {
-    // handle both files and directories
-    let result = if path.is_dir() {
+    // security: use symlink_metadata to avoid following symlinks (issue #55)
+    // this also mitigates TOCTOU attacks where a directory could be replaced
+    // with a symlink between scan and clean operations (issue #56)
+    let metadata = fs::symlink_metadata(path).map_err(|e| {
+        format!("failed to get metadata for {}: {}", path.display(), e)
+    })?;
+
+    // refuse to delete symlinks - prevents deletion of symlink targets
+    // which could be anywhere on the filesystem (including system directories)
+    if metadata.is_symlink() {
+        return Err(format!(
+            "refusing to delete symlink: {} (security: could point anywhere)",
+            path.display()
+        ));
+    }
+
+    // now safe to delete - we know it's not a symlink
+    let result = if metadata.is_dir() {
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
