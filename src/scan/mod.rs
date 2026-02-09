@@ -3,9 +3,12 @@ pub mod projects;
 pub mod caches;
 pub mod docker;
 
+use serde::Serialize;
+
 use crate::config::Config;
 use detector::{Detector, DetectorResult, BloatEntry};
 
+#[derive(Serialize)]
 pub struct ScanResult {
     pub entries: Vec<BloatEntry>,
     pub diagnostics: Vec<String>,
