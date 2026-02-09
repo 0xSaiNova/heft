@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::config::Config;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BloatCategory {
     ProjectArtifacts,
     ContainerData,
