@@ -1,38 +1,50 @@
 # heft
 
-Shows you where your disk space went and what you can delete.
+finds build artifacts and caches eating your disk space so you know what to delete.
 
-## why
+## what it does
 
-If youve ever run out of disk space and spent an hour figuring out what to delete, this is for you. node_modules from projects you forgot about, cargo target directories that somehow grew to 5gb, python venvs everywhere. Its always the same stuff but you have to hunt for it every time.
+scans your filesystem for:
+- project artifacts: node_modules, cargo target/, python venvs, gradle builds, xcode deriveddata
+- package caches: npm, pip, cargo, homebrew, maven, gradle
+- shows size and last modified time for each
 
-heft finds it all in one scan.
-
-## status
-
-Work in progress. The project artifact scanner works. Cache detection and docker support coming next.
+outputs as table or json.
 
 ## usage
 
-```
-heft scan --roots ~/code
+```bash
+heft scan                              # scan home directory
+heft scan --roots ~/code ~/projects    # scan specific directories
+heft scan --json                       # output as json
+heft clean                             # dry-run shows what would be deleted
+heft clean --yes                       # actually delete
+heft clean --category package-cache    # only clean caches
 ```
 
-Finds node_modules, cargo targets, python venvs, pycache, gradle builds, xcode deriveddata, go vendor dirs. Shows you the size of each and which ones are safe to delete.
+## current status
 
-## building
-
-```
-cargo build
-cargo test
-```
+- project artifact detection: working
+- cache detection: working
+- json/table output: working
+- cleanup engine: working
+- docker detection: placeholder
+- snapshot storage: not started
 
 ## whats next
 
-- cache detector (npm, pip, cargo, homebrew caches)
-- docker detector (images, volumes, build cache)
-- cleanup command with dry run
-- snapshot history so you can see what grew back
+- fix remaining bugs (overflow, permission errors, platform handling)
+- implement docker detector
+- add snapshot/diff functionality
+- progressive output during scan
+- windows support
+
+## building
+
+```bash
+cargo build --release
+./target/release/heft scan
+```
 
 ## license
 
