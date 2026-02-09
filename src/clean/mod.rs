@@ -6,11 +6,12 @@
 //!
 //! Supports:
 //! - Filesystem deletions for project artifacts and caches
-//! - Docker commands (docker system prune, docker image rm)
+//! - Docker commands for specific objects
 //!
 //! Never deletes Docker volumes without explicit opt-in.
 
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
@@ -33,28 +34,41 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
         bytes_freed: 0,
     };
 
-    // filter entries by category if specified
-    let entries_to_clean: Vec<&BloatEntry> = if let Some(cat_filter) = categories {
-        result.entries.iter()
-            .filter(|e| cat_filter.contains(&category_to_string(&e.category)))
+    // convert category filter strings to enums once for efficiency
+    let category_filter: Option<Vec<BloatCategory>> = categories.map(|strings| {
+        strings.iter()
+            .filter_map(|s| string_to_category(s.as_str()))
             .collect()
-    } else {
-        result.entries.iter().collect()
-    };
+    });
 
-    for entry in entries_to_clean {
-        match &mode {
-            CleanMode::DryRun => {
-                // just log what would be deleted
-                let location_str = location_to_string(&entry.location);
+    // filter entries by category if specified, using iterator to avoid allocation
+    let entries = result.entries.iter().filter(|entry| {
+        // skip aggregate entries early, they're just summaries
+        if matches!(entry.location, Location::Aggregate(_)) {
+            return false;
+        }
+
+        if let Some(ref cats) = category_filter {
+            cats.contains(&entry.category)
+        } else {
+            true
+        }
+    });
+
+    // process based on mode - match once instead of per entry
+    match mode {
+        CleanMode::DryRun => {
+            for entry in entries {
+                let location_str = location_display(&entry.location);
                 clean_result.deleted.push(format!("[dry-run] would delete: {}", location_str));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
             }
-            CleanMode::Execute => {
-                // actually delete
+        }
+        CleanMode::Execute => {
+            for entry in entries {
                 match delete_entry(entry) {
-                    Ok(location_str) => {
-                        clean_result.deleted.push(location_str);
+                    Ok(msg) => {
+                        clean_result.deleted.push(msg);
                         clean_result.bytes_freed += entry.reclaimable_bytes;
                     }
                     Err(e) => {
@@ -70,55 +84,61 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
 
 fn delete_entry(entry: &BloatEntry) -> Result<String, String> {
     match &entry.location {
-        Location::FilesystemPath(path) => {
-            match fs::remove_dir_all(path) {
-                Ok(_) => Ok(format!("deleted: {}", path.display())),
-                Err(e) => Err(format!("failed to delete {}: {}", path.display(), e)),
-            }
-        }
-        Location::DockerObject(obj_id) => {
-            // docker objects need specific commands based on type
-            // for now, just handle basic docker system prune
-            let output = Command::new("docker")
-                .arg("system")
-                .arg("prune")
-                .arg("-f")
-                .arg("--filter")
-                .arg(format!("label={}", obj_id))
-                .output();
+        Location::FilesystemPath(path) => delete_filesystem_path(path),
+        Location::DockerObject(obj_id) => delete_docker_object(obj_id),
+        Location::Aggregate(_) => unreachable!("aggregates filtered before deletion"),
+    }
+}
 
-            match output {
-                Ok(result) if result.status.success() => {
-                    Ok(format!("deleted docker object: {}", obj_id))
-                }
-                Ok(result) => {
-                    let stderr = String::from_utf8_lossy(&result.stderr);
-                    Err(format!("docker cleanup failed for {}: {}", obj_id, stderr))
-                }
-                Err(e) => {
-                    Err(format!("failed to run docker command for {}: {}", obj_id, e))
-                }
-            }
+fn delete_filesystem_path(path: &Path) -> Result<String, String> {
+    // handle both files and directories
+    let result = if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    };
+
+    match result {
+        Ok(_) => Ok(format!("deleted: {}", path.display())),
+        Err(e) => Err(format!("failed to delete {}: {}", path.display(), e)),
+    }
+}
+
+fn delete_docker_object(obj_id: &str) -> Result<String, String> {
+    // use docker rmi for image removal which is most common case
+    let output = Command::new("docker")
+        .arg("rmi")
+        .arg("-f")
+        .arg(obj_id)
+        .output();
+
+    match output {
+        Ok(result) if result.status.success() => {
+            Ok(format!("deleted docker image: {}", obj_id))
         }
-        Location::Aggregate(_) => {
-            // aggregate entries are just summaries, can't be deleted directly
-            Ok(String::new())
+        Ok(result) => {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            Err(format!("docker cleanup failed for {}: {}", obj_id, stderr.trim()))
+        }
+        Err(e) => {
+            Err(format!("failed to run docker command for {}: {}", obj_id, e))
         }
     }
 }
 
-fn category_to_string(category: &BloatCategory) -> String {
-    match category {
-        BloatCategory::ProjectArtifacts => "project-artifacts".to_string(),
-        BloatCategory::ContainerData => "container-data".to_string(),
-        BloatCategory::PackageCache => "package-cache".to_string(),
-        BloatCategory::IdeData => "ide-data".to_string(),
-        BloatCategory::SystemCache => "system-cache".to_string(),
-        BloatCategory::Other => "other".to_string(),
+fn string_to_category(s: &str) -> Option<BloatCategory> {
+    match s {
+        "project-artifacts" => Some(BloatCategory::ProjectArtifacts),
+        "container-data" => Some(BloatCategory::ContainerData),
+        "package-cache" => Some(BloatCategory::PackageCache),
+        "ide-data" => Some(BloatCategory::IdeData),
+        "system-cache" => Some(BloatCategory::SystemCache),
+        "other" => Some(BloatCategory::Other),
+        _ => None,
     }
 }
 
-fn location_to_string(location: &Location) -> String {
+fn location_display(location: &Location) -> String {
     match location {
         Location::FilesystemPath(path) => path.display().to_string(),
         Location::DockerObject(obj) => format!("docker:{}", obj),
