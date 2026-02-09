@@ -82,7 +82,7 @@ fn scan_directory(
             }
 
             match calculate_dir_size(path) {
-                Ok(size) => {
+                Ok((size, warnings)) => {
                     let project_name = determine_project_name(project_root, &artifact);
                     let last_modified = get_source_last_modified(project_root);
 
@@ -98,6 +98,10 @@ fn scan_directory(
 
                     seen_projects.insert(project_root.to_path_buf());
                     seen_artifacts.insert(path.to_path_buf());
+
+                    for warning in warnings {
+                        diagnostics.push(format!("{warning} (size may be underestimated)"));
+                    }
                 }
                 Err(e) => {
                     diagnostics.push(format!("failed to calculate size of {}: {}", path.display(), e));
@@ -176,12 +180,12 @@ fn has_python_project(dir: &Path) -> bool {
 }
 
 fn is_inside_installed_packages(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.contains("site-packages")
-        || path_str.contains("dist-packages")
-        || path_str.contains("node_modules")
-        || path_str.contains(".venv")
-        || path_str.contains("/venv/")
+    path.ancestors().any(|ancestor| {
+        ancestor.file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| matches!(s, "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"))
+            .unwrap_or(false)
+    })
 }
 
 // we skip hidden directories during traversal, but some artifacts we care about
@@ -197,18 +201,39 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
         .unwrap_or(false)
 }
 
-fn calculate_dir_size(path: &Path) -> Result<u64, std::io::Error> {
+fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error> {
     let mut total = 0u64;
+    let mut warnings = Vec::new();
+    let mut overflowed = false;
 
-    for entry in WalkDir::new(path).follow_links(false).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
-            if let Ok(metadata) = entry.metadata() {
-                total += metadata.len();
+    for entry in WalkDir::new(path).follow_links(false).into_iter() {
+        match entry {
+            Ok(entry) => {
+                if entry.file_type().is_file() {
+                    if let Ok(metadata) = entry.metadata() {
+                        let file_size = metadata.len();
+                        match total.checked_add(file_size) {
+                            Some(new_total) => total = new_total,
+                            None => {
+                                if !overflowed {
+                                    warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
+                                    overflowed = true;
+                                }
+                                total = u64::MAX;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
+                    warnings.push(format!("permission denied: {}", e.path().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown path".to_string())));
+                }
             }
         }
     }
 
-    Ok(total)
+    Ok((total, warnings))
 }
 
 fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> String {
@@ -240,21 +265,10 @@ fn read_project_name_from_manifest(path: &Path) -> Option<String> {
     }
 }
 
-// pulls a string field out of json without a full parser. good enough for
-// grabbing "name" from a package.json, not meant for complex cases.
+// extracts a field from json using proper parsing to handle escaped characters
 fn extract_json_field(content: &str, field: &str) -> Option<String> {
-    let pattern = format!("\"{field}\"");
-    let start = content.find(&pattern)?;
-    let after_key = &content[start + pattern.len()..];
-    let colon_pos = after_key.find(':')?;
-    let after_colon = after_key[colon_pos + 1..].trim_start();
-
-    if !after_colon.starts_with('"') {
-        return None;
-    }
-
-    let value_end = after_colon[1..].find('"')?;
-    Some(after_colon[1..1 + value_end].to_string())
+    let parsed: serde_json::Value = serde_json::from_str(content).ok()?;
+    parsed.get(field)?.as_str().map(|s| s.to_string())
 }
 
 fn extract_toml_package_name(content: &str) -> Option<String> {

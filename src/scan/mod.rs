@@ -12,6 +12,8 @@ use detector::{Detector, DetectorResult, BloatEntry};
 pub struct ScanResult {
     pub entries: Vec<BloatEntry>,
     pub diagnostics: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
 }
 
 impl ScanResult {
@@ -19,6 +21,7 @@ impl ScanResult {
         ScanResult {
             entries: Vec::new(),
             diagnostics: Vec::new(),
+            duration_ms: None,
         }
     }
 
@@ -29,6 +32,7 @@ impl ScanResult {
 }
 
 pub fn run(config: &Config) -> ScanResult {
+    let start = std::time::Instant::now();
     let mut scan_result = ScanResult::empty();
 
     let detectors: Vec<Box<dyn Detector>> = vec![
@@ -50,5 +54,6 @@ pub fn run(config: &Config) -> ScanResult {
         scan_result.merge(result);
     }
 
+    scan_result.duration_ms = Some(start.elapsed().as_millis() as u64);
     scan_result
 }

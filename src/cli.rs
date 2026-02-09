@@ -42,6 +42,10 @@ pub struct ScanArgs {
     /// Per-detector timeout in seconds
     #[arg(long, default_value_t = 30)]
     pub timeout: u64,
+
+    /// Show detailed output including diagnostics
+    #[arg(long, short = 'v', default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(Parser)]
@@ -61,10 +65,6 @@ pub struct ReportArgs {
 
 #[derive(Parser)]
 pub struct CleanArgs {
-    /// Show what would be deleted without deleting (default behavior)
-    #[arg(long, default_value_t = true)]
-    pub dry_run: bool,
-
     /// Skip confirmation and execute deletion
     #[arg(long, default_value_t = false)]
     pub yes: bool,
@@ -72,6 +72,13 @@ pub struct CleanArgs {
     /// Only clean specific categories
     #[arg(long, value_delimiter = ',')]
     pub category: Option<Vec<String>>,
+}
+
+impl CleanArgs {
+    /// returns true if this is a dry run (show what would be deleted)
+    pub fn is_dry_run(&self) -> bool {
+        !self.yes
+    }
 }
 
 #[derive(Parser)]
