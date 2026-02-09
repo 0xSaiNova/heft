@@ -17,7 +17,7 @@ pub fn print(result: &ScanResult, config: &Config) {
 fn print_scan_info(result: &ScanResult) {
     if let Some(duration_ms) = result.duration_ms {
         let duration_sec = duration_ms as f64 / 1000.0;
-        println!("\nscan completed in {:.2}s", duration_sec);
+        println!("\nscan completed in {duration_sec:.2}s");
     }
 }
 
@@ -31,11 +31,11 @@ fn print_diagnostics(result: &ScanResult, verbose: bool) {
         println!("Diagnostics:");
         println!("{}", "-".repeat(40));
         for diagnostic in &result.diagnostics {
-            println!("  {}", diagnostic);
+            println!("  {diagnostic}");
         }
     } else {
         for diagnostic in &result.diagnostics {
-            println!("[diagnostic] {}", diagnostic);
+            println!("[diagnostic] {diagnostic}");
         }
     }
 }

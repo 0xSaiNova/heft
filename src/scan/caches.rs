@@ -56,7 +56,7 @@ impl Detector for CacheDetector {
                     });
 
                     for warning in warnings {
-                        diagnostics.push(format!("{} (size may be underestimated)", warning));
+                        diagnostics.push(format!("{warning} (size may be underestimated)"));
                     }
                 }
                 Ok(_) => {}
@@ -149,7 +149,7 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
             // brew not installed, this is normal
         }
         Err(e) => {
-            diagnostics.push(format!("homebrew cache detection failed: {}", e));
+            diagnostics.push(format!("homebrew cache detection failed: {e}"));
         }
     }
 
@@ -208,7 +208,7 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
             return Ok(None);
         }
         Err(e) => {
-            return Err(format!("failed to spawn brew command: {}", e));
+            return Err(format!("failed to spawn brew command: {e}"));
         }
     };
 
@@ -231,7 +231,7 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
                     .ok_or_else(|| "failed to capture brew stdout".to_string())?;
 
                 if let Err(e) = stdout.read_to_string(&mut output) {
-                    return Err(format!("failed to read brew output: {}", e));
+                    return Err(format!("failed to read brew output: {e}"));
                 }
 
                 let path_str = output.trim();
@@ -254,7 +254,7 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                return Err(format!("failed to wait for brew process: {}", e));
+                return Err(format!("failed to wait for brew process: {e}"));
             }
         }
     }

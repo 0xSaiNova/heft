@@ -60,7 +60,7 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
         CleanMode::DryRun => {
             for entry in entries {
                 let location_str = location_display(&entry.location);
-                clean_result.deleted.push(format!("[dry-run] would delete: {}", location_str));
+                clean_result.deleted.push(format!("[dry-run] would delete: {location_str}"));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
             }
         }
@@ -130,14 +130,14 @@ fn delete_docker_object(obj_id: &str) -> Result<String, String> {
 
     match output {
         Ok(result) if result.status.success() => {
-            Ok(format!("deleted docker image: {}", obj_id))
+            Ok(format!("deleted docker image: {obj_id}"))
         }
         Ok(result) => {
             let stderr = String::from_utf8_lossy(&result.stderr);
             Err(format!("docker cleanup failed for {}: {}", obj_id, stderr.trim()))
         }
         Err(e) => {
-            Err(format!("failed to run docker command for {}: {}", obj_id, e))
+            Err(format!("failed to run docker command for {obj_id}: {e}"))
         }
     }
 }
@@ -157,7 +157,7 @@ fn string_to_category(s: &str) -> Option<BloatCategory> {
 fn location_display(location: &Location) -> String {
     match location {
         Location::FilesystemPath(path) => path.display().to_string(),
-        Location::DockerObject(obj) => format!("docker:{}", obj),
+        Location::DockerObject(obj) => format!("docker:{obj}"),
         Location::Aggregate(name) => name.clone(),
     }
 }

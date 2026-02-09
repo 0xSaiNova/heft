@@ -37,7 +37,7 @@ pub fn render(result: &ScanResult) -> String {
         let category_total: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
         grand_total += category_total;
 
-        output.push_str(&format!("\n{:?}\n", category));
+        output.push_str(&format!("\n{category:?}\n"));
         output.push_str(&"-".repeat(40));
         output.push('\n');
 
@@ -77,7 +77,7 @@ fn format_bytes(bytes: u64) -> String {
     } else if bytes >= KB {
         format!("{:.1} KB", bytes as f64 / KB as f64)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }
 
@@ -86,6 +86,6 @@ fn truncate(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         let truncated: String = s.chars().take(max_len - 3).collect();
-        format!("{}...", truncated)
+        format!("{truncated}...")
     }
 }

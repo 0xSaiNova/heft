@@ -100,7 +100,7 @@ fn scan_directory(
                     seen_artifacts.insert(path.to_path_buf());
 
                     for warning in warnings {
-                        diagnostics.push(format!("{} (size may be underestimated)", warning));
+                        diagnostics.push(format!("{warning} (size may be underestimated)"));
                     }
                 }
                 Err(e) => {

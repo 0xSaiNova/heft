@@ -34,21 +34,21 @@ fn main() {
 
             // print results
             for item in &clean_result.deleted {
-                println!("{}", item);
+                println!("{item}");
             }
 
             if !clean_result.errors.is_empty() {
                 eprintln!("\nerrors encountered:");
                 for error in &clean_result.errors {
-                    eprintln!("  {}", error);
+                    eprintln!("  {error}");
                 }
             }
 
             let mb_freed = clean_result.bytes_freed as f64 / 1_024_f64 / 1_024_f64;
             if args.is_dry_run() {
-                println!("\nwould free: {:.2} MB", mb_freed);
+                println!("\nwould free: {mb_freed:.2} MB");
             } else {
-                println!("\nfreed: {:.2} MB", mb_freed);
+                println!("\nfreed: {mb_freed:.2} MB");
             }
         }
         Command::Diff(args) => {
