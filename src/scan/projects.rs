@@ -274,24 +274,39 @@ fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error>
         match entry {
             Ok(entry) => {
                 if entry.file_type().is_file() {
-                    if let Ok(metadata) = entry.metadata() {
-                        let file_size = metadata.len();
-                        match total.checked_add(file_size) {
-                            Some(new_total) => total = new_total,
-                            None => {
-                                if !overflowed {
-                                    warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
-                                    overflowed = true;
+                    match entry.metadata() {
+                        Ok(metadata) => {
+                            let file_size = metadata.len();
+                            match total.checked_add(file_size) {
+                                Some(new_total) => total = new_total,
+                                None => {
+                                    if !overflowed {
+                                        warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
+                                        overflowed = true;
+                                    }
+                                    total = u64::MAX;
                                 }
-                                total = u64::MAX;
                             }
+                        }
+                        Err(e) => {
+                            warnings.push(format!("failed to read metadata for {}: {}",
+                                entry.path().display(), e));
                         }
                     }
                 }
             }
             Err(e) => {
+                let path_str = e.path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "unknown path".to_string());
+
                 if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {}", e.path().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown path".to_string())));
+                    warnings.push(format!("permission denied: {}", path_str));
+                } else if e.loop_ancestor().is_some() {
+                    warnings.push(format!("symlink loop detected: {}", path_str));
+                } else {
+                    // other errors: I/O errors, invalid UTF-8, filesystem issues
+                    warnings.push(format!("failed to traverse {}: {}", path_str, e));
                 }
             }
         }
