@@ -6,6 +6,10 @@
 //! - Volumes (total and reclaimable)
 //! - Build cache (total and reclaimable)
 //!
+//! Also detects Docker Desktop VM disk images on macOS and Windows:
+//! - macOS: ~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw
+//! - Windows: %USERPROFILE%\AppData\Local\Docker\wsl\data\ext4.vhdx
+//!
 //! Handles gracefully:
 //! - Docker not installed
 //! - Docker daemon not running
@@ -14,6 +18,7 @@
 //! Does not walk Docker's internal storage directories directly.
 
 use std::process::Command;
+use std::fs;
 use serde::Deserialize;
 
 use crate::config::Config;
@@ -41,12 +46,23 @@ impl Detector for DockerDetector {
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {
+        let mut all_entries = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        // get docker API resources (images, containers, volumes, build cache)
         match run_docker_system_df(config) {
-            Ok(entries) => DetectorResult {
-                entries,
-                diagnostics: Vec::new(),
-            },
-            Err(e) => DetectorResult::with_diagnostic(e),
+            Ok(mut entries) => all_entries.append(&mut entries),
+            Err(e) => diagnostics.push(e),
+        }
+
+        // detect Docker Desktop VM disk images (macOS/Windows only)
+        if let Some(vm_entry) = detect_docker_desktop_vm(config) {
+            all_entries.push(vm_entry);
+        }
+
+        DetectorResult {
+            entries: all_entries,
+            diagnostics,
         }
     }
 }
@@ -184,6 +200,74 @@ fn get_cleanup_hint(type_: &str) -> String {
         "Build Cache" => "docker builder prune".to_string(),
         _ => "docker system prune".to_string(),
     }
+}
+
+/// Detect Docker Desktop VM disk image on macOS and Windows.
+///
+/// NOTE: macOS and Windows detection paths are UNTESTED on actual hardware.
+/// Paths are based on Docker Desktop documentation. If you're running this on
+/// macOS or Windows and encounter issues, please report at:
+/// https://github.com/0xSaiNova/heft/issues/42
+///
+/// These VM disk images can be 30-60 GB and don't automatically shrink when
+/// you delete containers/images inside the VM.
+fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
+    let platform = platform::detect();
+
+    // only macOS and Windows use VM disk images for Docker Desktop
+    let (vm_path, cleanup_hint) = match platform {
+        platform::Platform::MacOS => {
+            // UNTESTED: This path is based on Docker Desktop documentation
+            let home = platform::home_dir()?;
+            let path = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
+            let hint = "Docker Desktop VM disk. To reclaim space: Docker Desktop → Settings → Resources → Disk image size → 'Clean/Purge data'. Or run 'docker system prune' and restart Docker Desktop.".to_string();
+            (path, hint)
+        }
+        platform::Platform::Windows => {
+            // UNTESTED: This path is based on Docker Desktop WSL2 documentation
+            let home = platform::home_dir()?;
+            let path = home.join("AppData/Local/Docker/wsl/data/ext4.vhdx");
+            let hint = "Docker Desktop VM disk. To reclaim space: run 'wsl --shutdown' then 'Optimize-VHD -Path $path -Mode Full' in PowerShell (admin).".to_string();
+            (path, hint)
+        }
+        _ => return None, // Linux doesn't use VM disk images
+    };
+
+    // check if the VM disk file exists
+    if !vm_path.exists() {
+        if config.verbose {
+            eprintln!("docker: VM disk not found at {}", vm_path.display());
+        }
+        return None;
+    }
+
+    // get the file size
+    let metadata = match fs::metadata(&vm_path) {
+        Ok(m) => m,
+        Err(e) => {
+            if config.verbose {
+                eprintln!("docker: failed to get VM disk metadata: {}", e);
+            }
+            return None;
+        }
+    };
+
+    let size_bytes = metadata.len();
+
+    // only report if there's actual data
+    if size_bytes == 0 {
+        return None;
+    }
+
+    Some(BloatEntry {
+        category: BloatCategory::ContainerData,
+        name: format!("Docker Desktop VM ({})", vm_path.display()),
+        location: Location::FilesystemPath(vm_path),
+        size_bytes,
+        reclaimable_bytes: 0, // we can't determine reclaimable size without analyzing the VM
+        last_modified: None, // timestamp not needed for VM disk
+        cleanup_hint: Some(cleanup_hint),
+    })
 }
 
 #[cfg(test)]
