@@ -156,17 +156,31 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
             manifest_file: Some("composer.json"),
         }),
 
-        ".gradle" | "build" if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() => {
+        ".gradle" if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() => {
             Some(ArtifactType {
                 cleanup_hint: "safe to delete, rebuild with gradle build",
                 manifest_file: None,
             })
         }
 
-        "DerivedData" => Some(ArtifactType {
-            cleanup_hint: "xcode build artifacts, safe to delete",
-            manifest_file: None,
-        }),
+        // only flag "build" dirs as gradle if they actually contain gradle artifacts
+        // prevents false positives on legitimate build folders used for other purposes
+        "build" if (parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists())
+                && is_gradle_build_dir(path) => {
+            Some(ArtifactType {
+                cleanup_hint: "safe to delete, rebuild with gradle build",
+                manifest_file: None,
+            })
+        }
+
+        // only flag DerivedData if it's actually from xcode
+        // check for xcode markers or being in the xcode cache location
+        "DerivedData" if is_xcode_derived_data(path, parent) => {
+            Some(ArtifactType {
+                cleanup_hint: "xcode build artifacts, safe to delete",
+                manifest_file: None,
+            })
+        }
 
         _ => None,
     }
@@ -186,6 +200,56 @@ fn is_inside_installed_packages(path: &Path) -> bool {
             .map(|s| matches!(s, "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"))
             .unwrap_or(false)
     })
+}
+
+// verify a "build" directory actually contains gradle artifacts, not just any folder named build.
+// checks for typical gradle output directories to avoid false positives.
+fn is_gradle_build_dir(path: &Path) -> bool {
+    path.join("classes").exists()
+        || path.join("libs").exists()
+        || path.join("tmp").exists()
+        || path.join("generated").exists()
+        || path.join("intermediates").exists()
+}
+
+// verify a "DerivedData" directory is actually from xcode, not just any folder with that name.
+// checks for xcode-specific markers or being in the standard xcode cache location.
+fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
+    // check if in standard xcode cache location (~/Library/Developer/Xcode/DerivedData)
+    // fixed: properly check if ancestor named "Xcode" has parent named "Developer"
+    let in_xcode_cache = path.ancestors().any(|ancestor| {
+        if let (Some(name), Some(parent)) = (ancestor.file_name(), ancestor.parent()) {
+            name.to_str() == Some("Xcode")
+                && parent.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s == "Developer")
+                    .unwrap_or(false)
+        } else {
+            false
+        }
+    });
+
+    // check for xcode project file in parent directories
+    let has_xcode_project = parent.ancestors().any(|ancestor| {
+        if let Ok(entries) = std::fs::read_dir(ancestor) {
+            entries.flatten().any(|e| {
+                e.path().extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|s| s == "xcodeproj" || s == "xcworkspace")
+                    .unwrap_or(false)
+            })
+        } else {
+            false
+        }
+    });
+
+    // check for xcode-specific subdirectories in DerivedData
+    let has_xcode_markers = path.join("Build").exists()
+        || path.join("Logs").exists()
+        || path.join("ModuleCache").exists()
+        || path.join("info.plist").exists();
+
+    in_xcode_cache || has_xcode_project || has_xcode_markers
 }
 
 // we skip hidden directories during traversal, but some artifacts we care about
@@ -210,24 +274,39 @@ fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error>
         match entry {
             Ok(entry) => {
                 if entry.file_type().is_file() {
-                    if let Ok(metadata) = entry.metadata() {
-                        let file_size = metadata.len();
-                        match total.checked_add(file_size) {
-                            Some(new_total) => total = new_total,
-                            None => {
-                                if !overflowed {
-                                    warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
-                                    overflowed = true;
+                    match entry.metadata() {
+                        Ok(metadata) => {
+                            let file_size = metadata.len();
+                            match total.checked_add(file_size) {
+                                Some(new_total) => total = new_total,
+                                None => {
+                                    if !overflowed {
+                                        warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
+                                        overflowed = true;
+                                    }
+                                    total = u64::MAX;
                                 }
-                                total = u64::MAX;
                             }
+                        }
+                        Err(e) => {
+                            warnings.push(format!("failed to read metadata for {}: {}",
+                                entry.path().display(), e));
                         }
                     }
                 }
             }
             Err(e) => {
+                let path_str = e.path()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "unknown path".to_string());
+
                 if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {}", e.path().map(|p| p.display().to_string()).unwrap_or_else(|| "unknown path".to_string())));
+                    warnings.push(format!("permission denied: {}", path_str));
+                } else if e.loop_ancestor().is_some() {
+                    warnings.push(format!("symlink loop detected: {}", path_str));
+                } else {
+                    // other errors: I/O errors, invalid UTF-8, filesystem issues
+                    warnings.push(format!("failed to traverse {}: {}", path_str, e));
                 }
             }
         }
