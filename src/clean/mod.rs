@@ -43,9 +43,11 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
 
     // filter entries by category if specified, using iterator to avoid allocation
     let entries = result.entries.iter().filter(|entry| {
-        // skip aggregate entries early, they're just summaries
-        if matches!(entry.location, Location::Aggregate(_)) {
-            return false;
+        // allow docker aggregates through, filter out other aggregates
+        if let Location::Aggregate(ref name) = entry.location {
+            if !is_docker_aggregate(name) {
+                return false;
+            }
         }
 
         if let Some(ref cats) = category_filter {
@@ -86,8 +88,15 @@ fn delete_entry(entry: &BloatEntry) -> Result<String, String> {
     match &entry.location {
         Location::FilesystemPath(path) => delete_filesystem_path(path),
         Location::DockerObject(obj_id) => delete_docker_object(obj_id),
-        Location::Aggregate(_) => unreachable!("aggregates filtered before deletion"),
+        Location::Aggregate(name) => delete_docker_aggregate(name),
     }
+}
+
+fn is_docker_aggregate(name: &str) -> bool {
+    matches!(
+        name,
+        "Images" | "Containers" | "Local Volumes" | "Build Cache"
+    )
 }
 
 fn delete_filesystem_path(path: &Path) -> Result<String, String> {
@@ -138,6 +147,39 @@ fn delete_docker_object(obj_id: &str) -> Result<String, String> {
         }
         Err(e) => {
             Err(format!("failed to run docker command for {obj_id}: {e}"))
+        }
+    }
+}
+
+fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
+    // map aggregate type to docker prune command
+    let (subcommand, extra_args) = match aggregate_type {
+        "Images" => ("image", vec!["prune", "-a", "-f"]),
+        "Containers" => ("container", vec!["prune", "-f"]),
+        "Local Volumes" => ("volume", vec!["prune", "-f"]),
+        "Build Cache" => ("builder", vec!["prune", "-a", "-f"]),
+        _ => return Err(format!("unknown docker aggregate type: {}", aggregate_type)),
+    };
+
+    let mut cmd = Command::new("docker");
+    cmd.arg(subcommand);
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
+
+    let output = cmd.output();
+
+    match output {
+        Ok(result) if result.status.success() => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            Ok(format!("cleaned docker {}: {}", aggregate_type.to_lowercase(), stdout.trim()))
+        }
+        Ok(result) => {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            Err(format!("docker cleanup failed for {}: {}", aggregate_type, stderr.trim()))
+        }
+        Err(e) => {
+            Err(format!("failed to run docker command for {}: {}", aggregate_type, e))
         }
     }
 }
