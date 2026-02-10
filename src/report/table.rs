@@ -22,11 +22,11 @@ pub fn render(result: &ScanResult) -> String {
         by_category.entry(entry.category).or_default().push(entry);
     }
 
-    // sort categories by total reclaimable size (largest first)
+    // sort categories by total size (largest first)
     let mut categories: Vec<_> = by_category.keys().copied().collect();
     categories.sort_by_key(|cat| {
         std::cmp::Reverse(
-            by_category[cat].iter().map(|e| e.reclaimable_bytes).sum::<u64>()
+            by_category[cat].iter().map(|e| e.size_bytes).sum::<u64>()
         )
     });
 
@@ -34,22 +34,22 @@ pub fn render(result: &ScanResult) -> String {
 
     for category in categories {
         let entries = &by_category[&category];
-        let category_total: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
+        let category_total: u64 = entries.iter().map(|e| e.size_bytes).sum();
         grand_total += category_total;
 
         output.push_str(&format!("\n{category:?}\n"));
         output.push_str(&"-".repeat(40));
         output.push('\n');
 
-        // sort entries within category by reclaimable size
+        // sort entries within category by size
         let mut sorted_entries: Vec<_> = entries.iter().collect();
-        sorted_entries.sort_by_key(|e| std::cmp::Reverse(e.reclaimable_bytes));
+        sorted_entries.sort_by_key(|e| std::cmp::Reverse(e.size_bytes));
 
         for entry in sorted_entries {
             output.push_str(&format!(
                 "  {:30} {:>10}\n",
                 truncate(&entry.name, 30),
-                format_bytes(entry.reclaimable_bytes)
+                format_bytes(entry.size_bytes)
             ));
         }
 
