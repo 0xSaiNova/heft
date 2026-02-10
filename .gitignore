@@ -14,3 +14,6 @@ project-setup-spec.md
 proj\ docs/
 docs/spec/
 docs/internal/
+*.cplan
+*plan*.md
+plan.md
