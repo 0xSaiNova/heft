@@ -8,12 +8,11 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - all detection accuracy bugs fixed
 - tests passing
 - critical security vulnerabilities patched
-- ready for phase 2
 
-**Phase 2: NEXT UP - Docker Support (v0.2 milestone)**
-- [#3](https://github.com/0xSaiNova/heft/issues/3) - implement docker detector
-- [#47](https://github.com/0xSaiNova/heft/issues/47) - fix docker object types
-- [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm detection
+**Phase 2: IN PROGRESS - Docker Support (v0.2 milestone)**
+- [#3](https://github.com/0xSaiNova/heft/issues/3) - implement docker detector ✅
+- [#47](https://github.com/0xSaiNova/heft/issues/47) - fix docker object types ✅
+- [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm detection (remaining)
 
 **Phase 3: Cleanup Safety** - 8 open issues ready to tackle after docker
 
@@ -48,8 +47,10 @@ need to fix these before users start trusting the tool. better to get it right n
 
 ## phase 2: ship docker support (v0.2)
 
-### [#3](https://github.com/0xSaiNova/heft/issues/3) - implement docker detector
+### [#3](https://github.com/0xSaiNova/heft/issues/3) - implement docker detector ✅ FIXED
 this is the big one. vision doc calls it v0.2 milestone. docker is where most of the space goes (10-50gb typically according to research.md). users need this.
+
+**status: fixed in [PR #65](https://github.com/0xSaiNova/heft/pull/65) - implemented docker detector using `docker system df --format json`. detects images, containers, volumes, and build cache with total and reclaimable sizes. handles docker not installed, daemon not running, and permission errors gracefully. changes in src/scan/docker.rs.**
 
 ### [#47](https://github.com/0xSaiNova/heft/issues/47) - fix docker object types ✅ FIXED
 docker cleanup is hardcoded for images only. need to handle containers, volumes, build cache too. better to get the architecture right now than refactor later when cleanup is already being used.
