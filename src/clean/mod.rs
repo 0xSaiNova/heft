@@ -14,6 +14,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::platform;
 use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
 
 pub enum CleanMode {
@@ -100,6 +101,9 @@ fn is_docker_aggregate(name: &str) -> bool {
 }
 
 fn delete_filesystem_path(path: &Path) -> Result<String, String> {
+    // validate path is in a safe location before deletion (issue #59)
+    validate_deletion_path(path)?;
+
     // security: use symlink_metadata to avoid following symlinks (issue #55)
     // this also mitigates TOCTOU attacks where a directory could be replaced
     // with a symlink between scan and clean operations (issue #56)
@@ -127,6 +131,67 @@ fn delete_filesystem_path(path: &Path) -> Result<String, String> {
         Ok(_) => Ok(format!("deleted: {}", path.display())),
         Err(e) => Err(format!("failed to delete {}: {}", path.display(), e)),
     }
+}
+
+/// Validates that a path is safe to delete.
+///
+/// Checks:
+/// - Path must be absolute
+/// - Path must be under user's home directory or temp directories
+/// - Path must not be the home directory itself
+///
+/// Note: Does NOT follow symlinks. The symlink check in delete_filesystem_path()
+/// handles symlink cases separately for security (issues #55, #56).
+fn validate_deletion_path(path: &Path) -> Result<(), String> {
+    // path must be absolute
+    if !path.is_absolute() {
+        return Err(format!(
+            "refusing to delete relative path: {} (security: must be absolute)",
+            path.display()
+        ));
+    }
+
+    // check if path is under home directory
+    // note: using starts_with on the path directly, not canonicalizing
+    // this avoids following symlinks and handles non-existent paths correctly
+    if let Some(home) = platform::home_dir() {
+        if path.starts_with(&home) {
+            // path is under home, but make sure it's not home itself
+            if path == home {
+                return Err(format!(
+                    "refusing to delete home directory: {} (security: too dangerous)",
+                    path.display()
+                ));
+            }
+            return Ok(());
+        }
+    }
+
+    // allow /tmp and its subdirectories on unix-like systems
+    #[cfg(unix)]
+    {
+        if path.starts_with("/tmp") {
+            return Ok(());
+        }
+    }
+
+    // allow Windows temp directories
+    #[cfg(windows)]
+    {
+        if let Some(temp) = std::env::var_os("TEMP").or_else(|| std::env::var_os("TMP")) {
+            use std::path::PathBuf;
+            let temp_path = PathBuf::from(temp);
+            if path.starts_with(&temp_path) {
+                return Ok(());
+            }
+        }
+    }
+
+    // path is not under home or temp - refuse to delete
+    Err(format!(
+        "refusing to delete path outside home directory: {} (security: not in safe location)",
+        path.display()
+    ))
 }
 
 fn delete_docker_object(obj_id: &str) -> Result<String, String> {
