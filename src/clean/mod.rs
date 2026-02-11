@@ -137,9 +137,11 @@ fn delete_filesystem_path(path: &Path) -> Result<String, String> {
 ///
 /// Checks:
 /// - Path must be absolute
-/// - Path must be under user's home directory or /tmp
+/// - Path must be under user's home directory or temp directories
 /// - Path must not be the home directory itself
-/// - Path must not be a system directory
+///
+/// Note: Does NOT follow symlinks. The symlink check in delete_filesystem_path()
+/// handles symlink cases separately for security (issues #55, #56).
 fn validate_deletion_path(path: &Path) -> Result<(), String> {
     // path must be absolute
     if !path.is_absolute() {
@@ -149,19 +151,16 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
         ));
     }
 
-    // get canonical path to resolve any . or .. components
-    let canonical = path.canonicalize().map_err(|e| {
-        format!("failed to canonicalize path {}: {}", path.display(), e)
-    })?;
-
     // check if path is under home directory
+    // note: using starts_with on the path directly, not canonicalizing
+    // this avoids following symlinks and handles non-existent paths correctly
     if let Some(home) = platform::home_dir() {
-        if canonical.starts_with(&home) {
+        if path.starts_with(&home) {
             // path is under home, but make sure it's not home itself
-            if canonical == home {
+            if path == home {
                 return Err(format!(
                     "refusing to delete home directory: {} (security: too dangerous)",
-                    canonical.display()
+                    path.display()
                 ));
             }
             return Ok(());
@@ -171,7 +170,7 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
     // allow /tmp and its subdirectories on unix-like systems
     #[cfg(unix)]
     {
-        if canonical.starts_with("/tmp") {
+        if path.starts_with("/tmp") {
             return Ok(());
         }
     }
@@ -180,8 +179,9 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
         if let Some(temp) = std::env::var_os("TEMP").or_else(|| std::env::var_os("TMP")) {
+            use std::path::PathBuf;
             let temp_path = PathBuf::from(temp);
-            if canonical.starts_with(&temp_path) {
+            if path.starts_with(&temp_path) {
                 return Ok(());
             }
         }
@@ -190,7 +190,7 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
     // path is not under home or temp - refuse to delete
     Err(format!(
         "refusing to delete path outside home directory: {} (security: not in safe location)",
-        canonical.display()
+        path.display()
     ))
 }
 
