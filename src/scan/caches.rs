@@ -92,7 +92,8 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     // yarn cache
     let yarn_path = match platform {
         Platform::MacOS => home.join("Library/Caches/Yarn"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".cache/yarn"),
+        Platform::Windows => home.join("AppData").join("Local").join("Yarn").join("Cache"),
+        Platform::Linux | Platform::Unknown => home.join(".cache/yarn"),
     };
     locations.push(CacheLocation {
         name: "yarn cache",
