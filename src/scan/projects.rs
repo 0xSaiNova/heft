@@ -361,7 +361,9 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
             continue;
         }
 
-        if trimmed.starts_with('[') {
+        // exit package section only when encountering a DIFFERENT section
+        // this allows [dependencies] and other sections after [package] without breaking
+        if trimmed.starts_with('[') && trimmed != "[package]" {
             in_package = false;
             continue;
         }
