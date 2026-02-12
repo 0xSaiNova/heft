@@ -250,6 +250,8 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
             Ok(None) => {
                 if start.elapsed() > timeout {
                     let _ = child.kill();
+                    // wait for process to actually terminate to avoid zombie process
+                    let _ = child.wait();
                     return Err("brew --cache timed out after 5 seconds".to_string());
                 }
                 std::thread::sleep(Duration::from_millis(100));
