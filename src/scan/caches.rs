@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use walkdir::WalkDir;
 
@@ -35,7 +36,7 @@ impl Detector for CacheDetector {
             }
         };
 
-        let (caches, cache_diagnostics) = get_cache_locations(&home, config.platform);
+        let (caches, cache_diagnostics) = get_cache_locations(&home, config.platform, config.timeout);
         diagnostics.extend(cache_diagnostics);
 
         for cache in caches {
@@ -77,7 +78,7 @@ struct CacheLocation {
     cleanup_hint: &'static str,
 }
 
-fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, Vec<String>) {
+fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (Vec<CacheLocation>, Vec<String>) {
     let mut locations = Vec::new();
     let mut diagnostics = Vec::new();
 
@@ -137,7 +138,7 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     });
 
     // homebrew cache (macOS and Linux)
-    match get_homebrew_cache() {
+    match get_homebrew_cache(timeout) {
         Ok(Some(brew_cache)) => {
             locations.push(CacheLocation {
                 name: "homebrew cache",
@@ -193,8 +194,7 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     (locations, diagnostics)
 }
 
-fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
-    use std::time::Duration;
+fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
     use std::process::Stdio;
     use std::io::Read;
 
@@ -213,7 +213,6 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
         }
     };
 
-    let timeout = Duration::from_secs(5);
     let start = std::time::Instant::now();
 
     loop {
@@ -252,7 +251,7 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
                     let _ = child.kill();
                     // wait for process to actually terminate to avoid zombie process
                     let _ = child.wait();
-                    return Err("brew --cache timed out after 5 seconds".to_string());
+                    return Err(format!("brew --cache timed out after {} seconds", timeout.as_secs()));
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }

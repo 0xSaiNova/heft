@@ -331,6 +331,13 @@ fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> Strin
 }
 
 fn read_project_name_from_manifest(path: &Path) -> Option<String> {
+    // check file size before reading to prevent OOM on maliciously large files
+    const MAX_MANIFEST_SIZE: u64 = 1024 * 1024; // 1MB
+    let metadata = fs::metadata(path).ok()?;
+    if metadata.len() > MAX_MANIFEST_SIZE {
+        return None;
+    }
+
     let content = fs::read_to_string(path).ok()?;
     let filename = path.file_name()?.to_str()?;
 
