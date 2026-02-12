@@ -6,6 +6,11 @@ use crate::scan::ScanResult;
 
 pub fn render(result: &ScanResult) -> String {
     serde_json::to_string_pretty(result).unwrap_or_else(|e| {
-        format!("{{\"error\": \"failed to serialize: {e}\"}}")
+        let error_obj = serde_json::json!({
+            "error": format!("failed to serialize: {}", e)
+        });
+        serde_json::to_string_pretty(&error_obj).unwrap_or_else(|_|
+            r#"{"error": "catastrophic serialization failure"}"#.to_string()
+        )
     })
 }
