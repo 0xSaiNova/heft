@@ -69,16 +69,13 @@ pub struct CleanArgs {
     #[arg(long, default_value_t = false)]
     pub yes: bool,
 
+    /// Show what would be deleted without prompting
+    #[arg(long, default_value_t = false)]
+    pub dry_run: bool,
+
     /// Only clean specific categories
     #[arg(long, value_delimiter = ',')]
     pub category: Option<Vec<String>>,
-}
-
-impl CleanArgs {
-    /// returns true if this is a dry run (show what would be deleted)
-    pub fn is_dry_run(&self) -> bool {
-        !self.yes
-    }
 }
 
 #[derive(Parser)]

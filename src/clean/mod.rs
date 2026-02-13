@@ -17,8 +17,10 @@ use std::process::Command;
 use crate::platform;
 use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
 
+#[derive(Copy, Clone, PartialEq)]
 pub enum CleanMode {
     DryRun,
+    Interactive,
     Execute,
 }
 
@@ -65,6 +67,69 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
                 let location_str = location_display(&entry.location);
                 clean_result.deleted.push(format!("[dry-run] would delete: {location_str}"));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
+            }
+        }
+        CleanMode::Interactive => {
+            // collect entries first (can't iterate twice)
+            let entries_vec: Vec<_> = entries.collect();
+
+            // group by category
+            use std::collections::HashMap;
+            let mut by_category: HashMap<BloatCategory, Vec<&BloatEntry>> = HashMap::new();
+            for entry in &entries_vec {
+                by_category.entry(entry.category).or_default().push(entry);
+            }
+
+            if by_category.is_empty() {
+                println!("No items to clean.");
+                return clean_result;
+            }
+
+            // calculate totals
+            let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
+            let total_items = entries_vec.len();
+
+            println!("\nFound {} reclaimable across {} categories:\n",
+                format_size(total_bytes), by_category.len());
+
+            // prompt per category
+            for (category, entries) in by_category.iter() {
+                let cat_bytes: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
+                let cat_items = entries.len();
+
+                println!("{}: {} ({} items)",
+                    category_display(category),
+                    format_size(cat_bytes),
+                    cat_items);
+
+                print!("  Delete? [y/n]: ");
+                use std::io::{self, Write};
+                io::stdout().flush().unwrap();
+
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).unwrap();
+
+                if input.trim().eq_ignore_ascii_case("y") {
+                    // delete this category
+                    for entry in entries {
+                        match delete_entry(entry) {
+                            Ok(msg) => {
+                                clean_result.deleted.push(msg);
+                                clean_result.bytes_freed += entry.reclaimable_bytes;
+                            }
+                            Err(e) => {
+                                clean_result.errors.push(e);
+                            }
+                        }
+                    }
+                } else {
+                    println!("  Skipped");
+                }
+                println!();
+            }
+
+            if clean_result.bytes_freed > 0 {
+                println!("Freed {}", format_size(clean_result.bytes_freed));
             }
         }
         CleanMode::Execute => {
@@ -266,5 +331,32 @@ fn location_display(location: &Location) -> String {
         Location::FilesystemPath(path) => path.display().to_string(),
         Location::DockerObject(obj) => format!("docker:{obj}"),
         Location::Aggregate(name) => name.clone(),
+    }
+}
+
+fn category_display(category: &BloatCategory) -> String {
+    match category {
+        BloatCategory::ProjectArtifacts => "ProjectArtifacts".to_string(),
+        BloatCategory::PackageCache => "PackageCache".to_string(),
+        BloatCategory::ContainerData => "ContainerData".to_string(),
+        BloatCategory::IdeData => "IdeData".to_string(),
+        BloatCategory::SystemCache => "SystemCache".to_string(),
+        BloatCategory::Other => "Other".to_string(),
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{} B", bytes)
     }
 }
