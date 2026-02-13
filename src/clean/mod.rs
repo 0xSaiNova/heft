@@ -87,13 +87,16 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
 
             // calculate totals
             let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
-            let total_items = entries_vec.len();
 
             println!("\nFound {} reclaimable across {} categories:\n",
                 format_size(total_bytes), by_category.len());
 
+            // sort categories for consistent display order
+            let mut categories: Vec<_> = by_category.iter().collect();
+            categories.sort_by_key(|(cat, _)| category_sort_order(cat));
+
             // prompt per category
-            for (category, entries) in by_category.iter() {
+            for (category, entries) in categories {
                 let cat_bytes: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
                 let cat_items = entries.len();
 
@@ -342,6 +345,17 @@ fn category_display(category: &BloatCategory) -> String {
         BloatCategory::IdeData => "IdeData".to_string(),
         BloatCategory::SystemCache => "SystemCache".to_string(),
         BloatCategory::Other => "Other".to_string(),
+    }
+}
+
+fn category_sort_order(category: &BloatCategory) -> u8 {
+    match category {
+        BloatCategory::ProjectArtifacts => 0,
+        BloatCategory::PackageCache => 1,
+        BloatCategory::ContainerData => 2,
+        BloatCategory::IdeData => 3,
+        BloatCategory::SystemCache => 4,
+        BloatCategory::Other => 5,
     }
 }
 
