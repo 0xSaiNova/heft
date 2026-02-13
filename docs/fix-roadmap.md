@@ -15,11 +15,14 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - [#29](https://github.com/0xSaiNova/heft/issues/29) - docker cleanup command ✅
 - [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm (shipped, testing on macOS/Windows)
 
-**Phase 3: IN PROGRESS - Cleanup Safety**
+**Phase 3: COMPLETE ✅ (v0.3.0)**
 - ✅ #46 - unreachable! replaced (PR #66)
 - ✅ #59 - path validation + Windows yarn path (PR #68)
-- ⚠️ #57 - overflow fixed, TOML parser still open
-- ❌ Remaining: #53 (zombie process), #54 (json escaping), #58 (timeout unused), #60 (duration overflow + manifest size)
+- ✅ #57 - TOML parser + overflow (commits 860cb05, 1cb06cd)
+- ✅ #53 - zombie process (commit ade129b)
+- ✅ #54 - json error escaping (commit ae08a4d)
+- ✅ #58 - timeout unused (commit c25a815)
+- ✅ #60 - duration overflow + manifest size (commit c25a815)
 
 ---
 
@@ -88,22 +91,30 @@ add validation before deletion (path exists, is under scan root, hasn't changed)
 
 **status: fixed in PR #68. added validate_deletion_path() that checks paths are absolute, under home/temp, and not home itself. fixed Windows yarn cache to use AppData/Local/Yarn/Cache with proper path joining.**
 
-### [#57](https://github.com/0xSaiNova/heft/issues/57) - TOML parser and overflow bugs ⚠️ PARTIALLY FIXED
+### [#57](https://github.com/0xSaiNova/heft/issues/57) - TOML parser and overflow bugs ✅ FIXED
 TOML parser breaks on certain Cargo.toml files, integer overflow underestimates sizes. affects accuracy and reliability.
 
-**status: integer overflow FIXED in commit 1cb06cd - now uses checked_add and caps at u64::MAX with warning. TOML parser bug STILL OPEN - exits [package] section on ANY bracket, not just different sections.**
+**status: FIXED - integer overflow fixed in commit 1cb06cd (uses checked_add and caps at u64::MAX with warning). TOML parser fixed in commit 860cb05 (now only exits [package] on different sections, not on [dependencies] etc).**
 
-### [#58](https://github.com/0xSaiNova/heft/issues/58) - timeout field unused
+### [#58](https://github.com/0xSaiNova/heft/issues/58) - timeout field unused ✅ FIXED
 timeout field exists but is never used anywhere. these affect accuracy and reliability.
 
-### [#53](https://github.com/0xSaiNova/heft/issues/53) - fix zombie process leak
+**status: FIXED in commit c25a815 - config.timeout now used in homebrew cache detection. Replaced hardcoded 5 second timeout with config parameter (default 30s, configurable via --timeout flag).**
+
+### [#53](https://github.com/0xSaiNova/heft/issues/53) - fix zombie process leak ✅ FIXED
 homebrew timeout leaves zombie processes. small resource leak but adds up. easy fix while we're already in caches.rs.
 
-### [#54](https://github.com/0xSaiNova/heft/issues/54) - json error escaping
+**status: FIXED in commit ade129b - added child.wait() after child.kill() to properly reap zombie process when brew command times out.**
+
+### [#54](https://github.com/0xSaiNova/heft/issues/54) - json error escaping ✅ FIXED
 edge case where error messages with quotes break json output. one line fix, makes json output bulletproof.
 
-### [#60](https://github.com/0xSaiNova/heft/issues/60) - other quality fixes
+**status: FIXED in commit ae08a4d - replaced string formatting with serde_json::json!() macro for proper escaping of quotes and special characters in error messages.**
+
+### [#60](https://github.com/0xSaiNova/heft/issues/60) - other quality fixes ✅ FIXED
 duration overflow (after 584 million years...) and manifest size checks. minor stuff but worth cleaning up. note: json escaping overlaps with [#54](https://github.com/0xSaiNova/heft/issues/54).
+
+**status: FIXED in commit c25a815 - changed duration_ms from u64 to u128 (prevents overflow), added 1MB size check before reading manifest files (prevents OOM). JSON escaping already fixed in #54.**
 
 ## phase 4: improve user experience
 

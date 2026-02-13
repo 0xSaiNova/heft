@@ -301,12 +301,12 @@ fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error>
                     .unwrap_or_else(|| "unknown path".to_string());
 
                 if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {}", path_str));
+                    warnings.push(format!("permission denied: {path_str}"));
                 } else if e.loop_ancestor().is_some() {
-                    warnings.push(format!("symlink loop detected: {}", path_str));
+                    warnings.push(format!("symlink loop detected: {path_str}"));
                 } else {
                     // other errors: I/O errors, invalid UTF-8, filesystem issues
-                    warnings.push(format!("failed to traverse {}: {}", path_str, e));
+                    warnings.push(format!("failed to traverse {path_str}: {e}"));
                 }
             }
         }

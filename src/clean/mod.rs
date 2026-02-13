@@ -107,10 +107,16 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
 
                 print!("  Delete? [y/n]: ");
                 use std::io::{self, Write};
-                io::stdout().flush().unwrap();
+                if io::stdout().flush().is_err() {
+                    eprintln!("Error: failed to write to stdout");
+                    continue;
+                }
 
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                if io::stdin().read_line(&mut input).is_err() {
+                    eprintln!("Error: failed to read from stdin");
+                    continue;
+                }
 
                 if input.trim().eq_ignore_ascii_case("y") {
                     // delete this category
@@ -291,7 +297,7 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
         "Containers" => ("container", vec!["prune", "-f"]),
         "Local Volumes" => ("volume", vec!["prune", "-f"]),
         "Build Cache" => ("builder", vec!["prune", "-a", "-f"]),
-        _ => return Err(format!("unknown docker aggregate type: {}", aggregate_type)),
+        _ => return Err(format!("unknown docker aggregate type: {aggregate_type}")),
     };
 
     let mut cmd = Command::new("docker");
@@ -312,7 +318,7 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
             Err(format!("docker cleanup failed for {}: {}", aggregate_type, stderr.trim()))
         }
         Err(e) => {
-            Err(format!("failed to run docker command for {}: {}", aggregate_type, e))
+            Err(format!("failed to run docker command for {aggregate_type}: {e}"))
         }
     }
 }
@@ -371,6 +377,6 @@ fn format_size(bytes: u64) -> String {
     } else if bytes >= KB {
         format!("{:.1} KB", bytes as f64 / KB as f64)
     } else {
-        format!("{} B", bytes)
+        format!("{bytes} B")
     }
 }

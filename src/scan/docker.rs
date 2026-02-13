@@ -78,7 +78,7 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
     let output = match output {
         Ok(o) => o,
         Err(e) => {
-            return Err(format!("docker: failed to run command: {}", e));
+            return Err(format!("docker: failed to run command: {e}"));
         }
     };
 
@@ -111,7 +111,7 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
             Ok(e) => e,
             Err(e) => {
                 if config.verbose {
-                    return Err(format!("docker: failed to parse output: {}", e));
+                    return Err(format!("docker: failed to parse output: {e}"));
                 }
                 continue;
             }
@@ -167,14 +167,14 @@ fn parse_docker_size(size_str: &str) -> Result<u64, String> {
     }
 
     if num_end == 0 {
-        return Err(format!("docker: invalid size format: {}", size_str));
+        return Err(format!("docker: invalid size format: {size_str}"));
     }
 
     let num_str = &size_part[..num_end];
     let unit = size_part[num_end..].trim();
 
     let num: f64 = num_str.parse()
-        .map_err(|_| format!("docker: invalid number in size: {}", size_str))?;
+        .map_err(|_| format!("docker: invalid number in size: {size_str}"))?;
 
     let multiplier: u64 = match unit {
         "B" => 1,
@@ -186,7 +186,7 @@ fn parse_docker_size(size_str: &str) -> Result<u64, String> {
         "MiB" => 1_048_576,
         "GiB" => 1_073_741_824,
         "TiB" => 1_099_511_627_776,
-        _ => return Err(format!("docker: unknown size unit: {}", unit)),
+        _ => return Err(format!("docker: unknown size unit: {unit}")),
     };
 
     Ok((num * multiplier as f64) as u64)
@@ -246,7 +246,7 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
         Ok(m) => m,
         Err(e) => {
             if config.verbose {
-                eprintln!("docker: failed to get VM disk metadata: {}", e);
+                eprintln!("docker: failed to get VM disk metadata: {e}");
             }
             return None;
         }
