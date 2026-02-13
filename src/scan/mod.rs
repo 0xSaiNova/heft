@@ -13,7 +13,7 @@ pub struct ScanResult {
     pub entries: Vec<BloatEntry>,
     pub diagnostics: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
+    pub duration_ms: Option<u128>,
 }
 
 impl ScanResult {
@@ -54,6 +54,6 @@ pub fn run(config: &Config) -> ScanResult {
         scan_result.merge(result);
     }
 
-    scan_result.duration_ms = Some(start.elapsed().as_millis() as u64);
+    scan_result.duration_ms = Some(start.elapsed().as_millis());
     scan_result
 }

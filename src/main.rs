@@ -22,33 +22,42 @@ fn main() {
             let config = Config::default();
             let scan_result = scan::run(&config);
 
-            // determine clean mode based on --yes flag
-            let mode = if args.is_dry_run() {
+            // determine clean mode based on flags
+            let mode = if args.yes {
+                clean::CleanMode::Execute
+            } else if args.dry_run {
                 clean::CleanMode::DryRun
             } else {
-                clean::CleanMode::Execute
+                clean::CleanMode::Interactive
             };
 
             // run cleanup
             let clean_result = clean::run(&scan_result, mode, args.category.clone());
 
-            // print results
-            for item in &clean_result.deleted {
-                println!("{item}");
-            }
+            // print results (skip for interactive mode - already printed)
+            if !matches!(mode, clean::CleanMode::Interactive) {
+                for item in &clean_result.deleted {
+                    println!("{item}");
+                }
 
-            if !clean_result.errors.is_empty() {
+                if !clean_result.errors.is_empty() {
+                    eprintln!("\nerrors encountered:");
+                    for error in &clean_result.errors {
+                        eprintln!("  {error}");
+                    }
+                }
+
+                let mb_freed = clean_result.bytes_freed as f64 / 1_024_f64 / 1_024_f64;
+                if args.dry_run {
+                    println!("\nwould free: {mb_freed:.2} MB");
+                } else {
+                    println!("\nfreed: {mb_freed:.2} MB");
+                }
+            } else if !clean_result.errors.is_empty() {
                 eprintln!("\nerrors encountered:");
                 for error in &clean_result.errors {
                     eprintln!("  {error}");
                 }
-            }
-
-            let mb_freed = clean_result.bytes_freed as f64 / 1_024_f64 / 1_024_f64;
-            if args.is_dry_run() {
-                println!("\nwould free: {mb_freed:.2} MB");
-            } else {
-                println!("\nfreed: {mb_freed:.2} MB");
             }
         }
         Command::Diff(args) => {

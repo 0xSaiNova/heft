@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use walkdir::WalkDir;
 
@@ -35,7 +36,7 @@ impl Detector for CacheDetector {
             }
         };
 
-        let (caches, cache_diagnostics) = get_cache_locations(&home, config.platform);
+        let (caches, cache_diagnostics) = get_cache_locations(&home, config.platform, config.timeout);
         diagnostics.extend(cache_diagnostics);
 
         for cache in caches {
@@ -77,7 +78,7 @@ struct CacheLocation {
     cleanup_hint: &'static str,
 }
 
-fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, Vec<String>) {
+fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (Vec<CacheLocation>, Vec<String>) {
     let mut locations = Vec::new();
     let mut diagnostics = Vec::new();
 
@@ -92,7 +93,8 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     // yarn cache
     let yarn_path = match platform {
         Platform::MacOS => home.join("Library/Caches/Yarn"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".cache/yarn"),
+        Platform::Windows => home.join("AppData").join("Local").join("Yarn").join("Cache"),
+        Platform::Linux | Platform::Unknown => home.join(".cache/yarn"),
     };
     locations.push(CacheLocation {
         name: "yarn cache",
@@ -136,7 +138,7 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     });
 
     // homebrew cache (macOS and Linux)
-    match get_homebrew_cache() {
+    match get_homebrew_cache(timeout) {
         Ok(Some(brew_cache)) => {
             locations.push(CacheLocation {
                 name: "homebrew cache",
@@ -192,8 +194,7 @@ fn get_cache_locations(home: &Path, platform: Platform) -> (Vec<CacheLocation>, 
     (locations, diagnostics)
 }
 
-fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
-    use std::time::Duration;
+fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
     use std::process::Stdio;
     use std::io::Read;
 
@@ -212,7 +213,6 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
         }
     };
 
-    let timeout = Duration::from_secs(5);
     let start = std::time::Instant::now();
 
     loop {
@@ -249,7 +249,9 @@ fn get_homebrew_cache() -> Result<Option<PathBuf>, String> {
             Ok(None) => {
                 if start.elapsed() > timeout {
                     let _ = child.kill();
-                    return Err("brew --cache timed out after 5 seconds".to_string());
+                    // wait for process to actually terminate to avoid zombie process
+                    let _ = child.wait();
+                    return Err(format!("brew --cache timed out after {} seconds", timeout.as_secs()));
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -296,12 +298,12 @@ fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error>
                     .unwrap_or_else(|| "unknown path".to_string());
 
                 if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {}", path_str));
+                    warnings.push(format!("permission denied: {path_str}"));
                 } else if e.loop_ancestor().is_some() {
-                    warnings.push(format!("symlink loop detected: {}", path_str));
+                    warnings.push(format!("symlink loop detected: {path_str}"));
                 } else {
                     // other errors: I/O errors, invalid UTF-8, filesystem issues
-                    warnings.push(format!("failed to traverse {}: {}", path_str, e));
+                    warnings.push(format!("failed to traverse {path_str}: {e}"));
                 }
             }
         }
