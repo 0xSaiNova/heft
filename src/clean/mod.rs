@@ -14,10 +14,13 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::platform;
 use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
 
+#[derive(Copy, Clone, PartialEq)]
 pub enum CleanMode {
     DryRun,
+    Interactive,
     Execute,
 }
 
@@ -66,6 +69,78 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
                 clean_result.bytes_freed += entry.reclaimable_bytes;
             }
         }
+        CleanMode::Interactive => {
+            // collect entries first (can't iterate twice)
+            let entries_vec: Vec<_> = entries.collect();
+
+            // group by category
+            use std::collections::HashMap;
+            let mut by_category: HashMap<BloatCategory, Vec<&BloatEntry>> = HashMap::new();
+            for entry in &entries_vec {
+                by_category.entry(entry.category).or_default().push(entry);
+            }
+
+            if by_category.is_empty() {
+                println!("No items to clean.");
+                return clean_result;
+            }
+
+            // calculate totals
+            let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
+
+            println!("\nFound {} reclaimable across {} categories:\n",
+                format_size(total_bytes), by_category.len());
+
+            // sort categories for consistent display order
+            let mut categories: Vec<_> = by_category.iter().collect();
+            categories.sort_by_key(|(cat, _)| category_sort_order(cat));
+
+            // prompt per category
+            for (category, entries) in categories {
+                let cat_bytes: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
+                let cat_items = entries.len();
+
+                println!("{}: {} ({} items)",
+                    category_display(category),
+                    format_size(cat_bytes),
+                    cat_items);
+
+                print!("  Delete? [y/n]: ");
+                use std::io::{self, Write};
+                if io::stdout().flush().is_err() {
+                    eprintln!("Error: failed to write to stdout");
+                    continue;
+                }
+
+                let mut input = String::new();
+                if io::stdin().read_line(&mut input).is_err() {
+                    eprintln!("Error: failed to read from stdin");
+                    continue;
+                }
+
+                if input.trim().eq_ignore_ascii_case("y") {
+                    // delete this category
+                    for entry in entries {
+                        match delete_entry(entry) {
+                            Ok(msg) => {
+                                clean_result.deleted.push(msg);
+                                clean_result.bytes_freed += entry.reclaimable_bytes;
+                            }
+                            Err(e) => {
+                                clean_result.errors.push(e);
+                            }
+                        }
+                    }
+                } else {
+                    println!("  Skipped");
+                }
+                println!();
+            }
+
+            if clean_result.bytes_freed > 0 {
+                println!("Freed {}", format_size(clean_result.bytes_freed));
+            }
+        }
         CleanMode::Execute => {
             for entry in entries {
                 match delete_entry(entry) {
@@ -100,6 +175,9 @@ fn is_docker_aggregate(name: &str) -> bool {
 }
 
 fn delete_filesystem_path(path: &Path) -> Result<String, String> {
+    // validate path is in a safe location before deletion (issue #59)
+    validate_deletion_path(path)?;
+
     // security: use symlink_metadata to avoid following symlinks (issue #55)
     // this also mitigates TOCTOU attacks where a directory could be replaced
     // with a symlink between scan and clean operations (issue #56)
@@ -127,6 +205,67 @@ fn delete_filesystem_path(path: &Path) -> Result<String, String> {
         Ok(_) => Ok(format!("deleted: {}", path.display())),
         Err(e) => Err(format!("failed to delete {}: {}", path.display(), e)),
     }
+}
+
+/// Validates that a path is safe to delete.
+///
+/// Checks:
+/// - Path must be absolute
+/// - Path must be under user's home directory or temp directories
+/// - Path must not be the home directory itself
+///
+/// Note: Does NOT follow symlinks. The symlink check in delete_filesystem_path()
+/// handles symlink cases separately for security (issues #55, #56).
+fn validate_deletion_path(path: &Path) -> Result<(), String> {
+    // path must be absolute
+    if !path.is_absolute() {
+        return Err(format!(
+            "refusing to delete relative path: {} (security: must be absolute)",
+            path.display()
+        ));
+    }
+
+    // check if path is under home directory
+    // note: using starts_with on the path directly, not canonicalizing
+    // this avoids following symlinks and handles non-existent paths correctly
+    if let Some(home) = platform::home_dir() {
+        if path.starts_with(&home) {
+            // path is under home, but make sure it's not home itself
+            if path == home {
+                return Err(format!(
+                    "refusing to delete home directory: {} (security: too dangerous)",
+                    path.display()
+                ));
+            }
+            return Ok(());
+        }
+    }
+
+    // allow /tmp and its subdirectories on unix-like systems
+    #[cfg(unix)]
+    {
+        if path.starts_with("/tmp") {
+            return Ok(());
+        }
+    }
+
+    // allow Windows temp directories
+    #[cfg(windows)]
+    {
+        if let Some(temp) = std::env::var_os("TEMP").or_else(|| std::env::var_os("TMP")) {
+            use std::path::PathBuf;
+            let temp_path = PathBuf::from(temp);
+            if path.starts_with(&temp_path) {
+                return Ok(());
+            }
+        }
+    }
+
+    // path is not under home or temp - refuse to delete
+    Err(format!(
+        "refusing to delete path outside home directory: {} (security: not in safe location)",
+        path.display()
+    ))
 }
 
 fn delete_docker_object(obj_id: &str) -> Result<String, String> {
@@ -158,7 +297,7 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
         "Containers" => ("container", vec!["prune", "-f"]),
         "Local Volumes" => ("volume", vec!["prune", "-f"]),
         "Build Cache" => ("builder", vec!["prune", "-a", "-f"]),
-        _ => return Err(format!("unknown docker aggregate type: {}", aggregate_type)),
+        _ => return Err(format!("unknown docker aggregate type: {aggregate_type}")),
     };
 
     let mut cmd = Command::new("docker");
@@ -179,7 +318,7 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
             Err(format!("docker cleanup failed for {}: {}", aggregate_type, stderr.trim()))
         }
         Err(e) => {
-            Err(format!("failed to run docker command for {}: {}", aggregate_type, e))
+            Err(format!("failed to run docker command for {aggregate_type}: {e}"))
         }
     }
 }
@@ -201,5 +340,43 @@ fn location_display(location: &Location) -> String {
         Location::FilesystemPath(path) => path.display().to_string(),
         Location::DockerObject(obj) => format!("docker:{obj}"),
         Location::Aggregate(name) => name.clone(),
+    }
+}
+
+fn category_display(category: &BloatCategory) -> String {
+    match category {
+        BloatCategory::ProjectArtifacts => "ProjectArtifacts".to_string(),
+        BloatCategory::PackageCache => "PackageCache".to_string(),
+        BloatCategory::ContainerData => "ContainerData".to_string(),
+        BloatCategory::IdeData => "IdeData".to_string(),
+        BloatCategory::SystemCache => "SystemCache".to_string(),
+        BloatCategory::Other => "Other".to_string(),
+    }
+}
+
+fn category_sort_order(category: &BloatCategory) -> u8 {
+    match category {
+        BloatCategory::ProjectArtifacts => 0,
+        BloatCategory::PackageCache => 1,
+        BloatCategory::ContainerData => 2,
+        BloatCategory::IdeData => 3,
+        BloatCategory::SystemCache => 4,
+        BloatCategory::Other => 5,
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes} B")
     }
 }

@@ -301,12 +301,12 @@ fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error>
                     .unwrap_or_else(|| "unknown path".to_string());
 
                 if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {}", path_str));
+                    warnings.push(format!("permission denied: {path_str}"));
                 } else if e.loop_ancestor().is_some() {
-                    warnings.push(format!("symlink loop detected: {}", path_str));
+                    warnings.push(format!("symlink loop detected: {path_str}"));
                 } else {
                     // other errors: I/O errors, invalid UTF-8, filesystem issues
-                    warnings.push(format!("failed to traverse {}: {}", path_str, e));
+                    warnings.push(format!("failed to traverse {path_str}: {e}"));
                 }
             }
         }
@@ -331,6 +331,13 @@ fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> Strin
 }
 
 fn read_project_name_from_manifest(path: &Path) -> Option<String> {
+    // check file size before reading to prevent OOM on maliciously large files
+    const MAX_MANIFEST_SIZE: u64 = 1024 * 1024; // 1MB
+    let metadata = fs::metadata(path).ok()?;
+    if metadata.len() > MAX_MANIFEST_SIZE {
+        return None;
+    }
+
     let content = fs::read_to_string(path).ok()?;
     let filename = path.file_name()?.to_str()?;
 
@@ -361,7 +368,9 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
             continue;
         }
 
-        if trimmed.starts_with('[') {
+        // exit package section only when encountering a DIFFERENT section
+        // this allows [dependencies] and other sections after [package] without breaking
+        if trimmed.starts_with('[') && trimmed != "[package]" {
             in_package = false;
             continue;
         }

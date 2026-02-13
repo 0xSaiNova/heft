@@ -2,19 +2,27 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 10, 2026)
+## Status Summary (Updated: Feb 11, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
 - tests passing
 - critical security vulnerabilities patched
 
-**Phase 2: IN PROGRESS - Docker Support (v0.2 milestone)**
-- [#3](https://github.com/0xSaiNova/heft/issues/3) - implement docker detector ✅
-- [#47](https://github.com/0xSaiNova/heft/issues/47) - fix docker object types ✅
-- [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm detection (remaining)
+**Phase 2: SHIPPED ✅ (v0.2.0 released)**
+- [#3](https://github.com/0xSaiNova/heft/issues/3) - docker detector ✅
+- [#47](https://github.com/0xSaiNova/heft/issues/47) - docker object types ✅
+- [#29](https://github.com/0xSaiNova/heft/issues/29) - docker cleanup command ✅
+- [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm (shipped, testing on macOS/Windows)
 
-**Phase 3: Cleanup Safety** - 8 open issues ready to tackle after docker
+**Phase 3: COMPLETE ✅ (v0.3.0)**
+- ✅ #46 - unreachable! replaced (PR #66)
+- ✅ #59 - path validation + Windows yarn path (PR #68)
+- ✅ #57 - TOML parser + overflow (commits 860cb05, 1cb06cd)
+- ✅ #53 - zombie process (commit ade129b)
+- ✅ #54 - json error escaping (commit ae08a4d)
+- ✅ #58 - timeout unused (commit c25a815)
+- ✅ #60 - duration overflow + manifest size (commit c25a815)
 
 ---
 
@@ -57,32 +65,56 @@ docker cleanup is hardcoded for images only. need to handle containers, volumes,
 
 **status: fixed - cleanup now handles all docker aggregate types (images, containers, volumes, build cache) using docker prune commands. changes in src/clean/mod.rs to allow docker aggregates through filter and added delete_docker_aggregate() function.**
 
-### [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm detection
+### [#42](https://github.com/0xSaiNova/heft/issues/42) - docker desktop vm detection ⚠️ IN TESTING
 macos and windows users have these huge vm disk files (30-60gb) that the docker api doesn't report. complements the docker detector by catching the physical disk usage.
 
-**milestone: with these three done, we hit v0.2**
+**status: shipped in v0.2.0 via PR #67. implementation complete but needs community testing on macOS/Windows to verify paths and cleanup hints work. macOS testing in progress.**
+
+### [#29](https://github.com/0xSaiNova/heft/issues/29) - docker cleanup command ✅ FIXED
+cleanup command now works with all docker aggregate types using docker prune commands.
+
+**status: fixed in PR #66 alongside #47. shipped in v0.2.0.**
+
+**milestone: v0.2.0 SHIPPED ✅**
 
 ## phase 3: make cleanup safe
 
 once the critical security issues ([#55](https://github.com/0xSaiNova/heft/issues/55), [#56](https://github.com/0xSaiNova/heft/issues/56)) are fixed, clean up the remaining safety issues:
 
-### [#46](https://github.com/0xSaiNova/heft/issues/46) - replace unreachable! with error
+### [#46](https://github.com/0xSaiNova/heft/issues/46) - replace unreachable! with error ✅ FIXED
 cleanup code has a panic that could crash if something unexpected happens. should just return an error instead. quick fix, prevents potential crashes.
 
-### [#59](https://github.com/0xSaiNova/heft/issues/59) - path validation and windows paths
+**status: fixed in PR #66. replaced unreachable!() with delete_docker_aggregate() function that handles all aggregate types properly.**
+
+### [#59](https://github.com/0xSaiNova/heft/issues/59) - path validation and windows paths ✅ FIXED
 add validation before deletion (path exists, is under scan root, hasn't changed). also fix windows yarn cache path that uses forward slashes. both are safety/correctness issues.
 
-### [#57](https://github.com/0xSaiNova/heft/issues/57), [#58](https://github.com/0xSaiNova/heft/issues/58) - parser and timeout bugs
-TOML parser breaks on certain Cargo.toml files, integer overflow underestimates sizes. timeout field exists but is never used anywhere. these affect accuracy and reliability.
+**status: fixed in PR #68. added validate_deletion_path() that checks paths are absolute, under home/temp, and not home itself. fixed Windows yarn cache to use AppData/Local/Yarn/Cache with proper path joining.**
 
-### [#53](https://github.com/0xSaiNova/heft/issues/53) - fix zombie process leak
+### [#57](https://github.com/0xSaiNova/heft/issues/57) - TOML parser and overflow bugs ✅ FIXED
+TOML parser breaks on certain Cargo.toml files, integer overflow underestimates sizes. affects accuracy and reliability.
+
+**status: FIXED - integer overflow fixed in commit 1cb06cd (uses checked_add and caps at u64::MAX with warning). TOML parser fixed in commit 860cb05 (now only exits [package] on different sections, not on [dependencies] etc).**
+
+### [#58](https://github.com/0xSaiNova/heft/issues/58) - timeout field unused ✅ FIXED
+timeout field exists but is never used anywhere. these affect accuracy and reliability.
+
+**status: FIXED in commit c25a815 - config.timeout now used in homebrew cache detection. Replaced hardcoded 5 second timeout with config parameter (default 30s, configurable via --timeout flag).**
+
+### [#53](https://github.com/0xSaiNova/heft/issues/53) - fix zombie process leak ✅ FIXED
 homebrew timeout leaves zombie processes. small resource leak but adds up. easy fix while we're already in caches.rs.
 
-### [#54](https://github.com/0xSaiNova/heft/issues/54) - json error escaping
+**status: FIXED in commit ade129b - added child.wait() after child.kill() to properly reap zombie process when brew command times out.**
+
+### [#54](https://github.com/0xSaiNova/heft/issues/54) - json error escaping ✅ FIXED
 edge case where error messages with quotes break json output. one line fix, makes json output bulletproof.
 
-### [#60](https://github.com/0xSaiNova/heft/issues/60) - other quality fixes
+**status: FIXED in commit ae08a4d - replaced string formatting with serde_json::json!() macro for proper escaping of quotes and special characters in error messages.**
+
+### [#60](https://github.com/0xSaiNova/heft/issues/60) - other quality fixes ✅ FIXED
 duration overflow (after 584 million years...) and manifest size checks. minor stuff but worth cleaning up. note: json escaping overlaps with [#54](https://github.com/0xSaiNova/heft/issues/54).
+
+**status: FIXED in commit c25a815 - changed duration_ms from u64 to u128 (prevents overflow), added 1MB size check before reading manifest files (prevents OOM). JSON escaping already fixed in #54.**
 
 ## phase 4: improve user experience
 
@@ -110,10 +142,7 @@ compare two snapshots to see what grew or shrank. depends on [#6](https://github
 
 **milestone: with these we hit v0.4**
 
-## phase 7: complete cleanup support
-
-### [#29](https://github.com/0xSaiNova/heft/issues/29) - docker cleanup command
-actually delete docker stuff from the clean command. depends on [#3](https://github.com/0xSaiNova/heft/issues/3) and [#47](https://github.com/0xSaiNova/heft/issues/47) being done first.
+## phase 7: polish
 
 ### [#48](https://github.com/0xSaiNova/heft/issues/48) - implement Default trait
 clippy complains about our default() method. should implement the trait properly. just good housekeeping, not urgent.
