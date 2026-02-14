@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use crate::scan::ScanResult;
 use crate::scan::detector::BloatCategory;
+use crate::util::format_bytes;
 
 pub fn render(result: &ScanResult) -> String {
     if result.entries.is_empty() {
@@ -63,22 +64,6 @@ pub fn render(result: &ScanResult) -> String {
     output.push_str(&format!("\n{:>42}\n", format!("TOTAL: {}", format_bytes(grand_total))));
 
     output
-}
-
-fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = 1024 * KB;
-    const GB: u64 = 1024 * MB;
-
-    if bytes >= GB {
-        format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 fn truncate(s: &str, max_len: usize) -> String {

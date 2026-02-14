@@ -46,6 +46,10 @@ pub struct ScanArgs {
     /// Show detailed output including diagnostics
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
+
+    /// Show progressive output as each detector completes
+    #[arg(long, default_value_t = false)]
+    pub progressive: bool,
 }
 
 #[derive(Parser)]
