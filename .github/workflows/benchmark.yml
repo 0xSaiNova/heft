@@ -7,6 +7,10 @@ on:
     branches: [main, dev, p5]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   benchmark:
     name: Run Performance Benchmarks
@@ -37,7 +41,7 @@ jobs:
           key: ${{ runner.os }}-benchmark-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run Benchmarks
-        run: cargo bench --bench scan_performance -- --output-format bencher | tee benchmark-output.txt
+        run: cargo bench --bench scan_performance 2>&1 | tee benchmark-output.txt
 
       - name: Store Benchmark Results
         uses: actions/upload-artifact@v4
@@ -55,7 +59,12 @@ jobs:
             const fs = require('fs');
             const output = fs.readFileSync('benchmark-output.txt', 'utf8');
 
-            const body = `## Benchmark Results\n\n\`\`\`\n${output}\n\`\`\`\n\n*Full results available in artifacts*`;
+            // Extract summary lines (time estimates)
+            const lines = output.split('\n');
+            const timeLines = lines.filter(line => line.includes('time:') || line.includes('Benchmarking'));
+            const summary = timeLines.slice(0, 20).join('\n'); // First 20 relevant lines
+
+            const body = `## Benchmark Results\n\nBenchmarks completed successfully!\n\n\`\`\`\n${summary}\n\`\`\`\n\n📊 Full results and HTML reports available in workflow artifacts.`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
