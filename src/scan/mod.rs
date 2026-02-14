@@ -14,6 +14,8 @@ pub struct ScanResult {
     pub diagnostics: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub detector_timings: Vec<(String, u128)>,
 }
 
 impl ScanResult {
@@ -22,6 +24,7 @@ impl ScanResult {
             entries: Vec::new(),
             diagnostics: Vec::new(),
             duration_ms: None,
+            detector_timings: Vec::new(),
         }
     }
 
@@ -41,6 +44,8 @@ pub fn run(config: &Config) -> ScanResult {
         Box::new(docker::DockerDetector),
     ];
 
+    scan_result.detector_timings.reserve(detectors.len());
+
     for detector in detectors {
         if !detector.available(config) {
             scan_result.diagnostics.push(format!(
@@ -50,7 +55,11 @@ pub fn run(config: &Config) -> ScanResult {
             continue;
         }
 
+        let detector_start = std::time::Instant::now();
         let result = detector.scan(config);
+        let detector_duration = detector_start.elapsed().as_millis();
+
+        scan_result.detector_timings.push((detector.name().to_string(), detector_duration));
         scan_result.merge(result);
     }
 

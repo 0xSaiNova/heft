@@ -9,15 +9,22 @@ pub fn print(result: &ScanResult, config: &Config) {
         println!("{}", json::render(result));
     } else {
         print!("{}", table::render(result));
-        print_scan_info(result);
+        print_scan_info(result, config.verbose);
         print_diagnostics(result, config.verbose);
     }
 }
 
-fn print_scan_info(result: &ScanResult) {
+fn print_scan_info(result: &ScanResult, verbose: bool) {
     if let Some(duration_ms) = result.duration_ms {
         let duration_sec = duration_ms as f64 / 1000.0;
         println!("\nscan completed in {duration_sec:.2}s");
+
+        if verbose && !result.detector_timings.is_empty() {
+            for (detector_name, timing_ms) in &result.detector_timings {
+                let timing_sec = *timing_ms as f64 / 1000.0;
+                println!("  {detector_name}: {timing_sec:.2}s");
+            }
+        }
     }
 }
 
