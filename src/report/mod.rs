@@ -31,23 +31,23 @@ fn print_scan_info(result: &ScanResult, verbose: bool) {
         if verbose && !result.detector_timings.is_empty() {
             println!("\ndetector timing:");
 
-            // Build a map of detector names to memory deltas for easy lookup
-            let memory_map: std::collections::HashMap<_, _> =
-                result.detector_memory.iter().cloned().collect();
-
             for (detector_name, timing_ms) in &result.detector_timings {
                 let timing_sec = *timing_ms as f64 / 1000.0;
 
+                // Linear search for memory delta - only 3 detectors, faster than HashMap
+                let memory_delta = result.detector_memory
+                    .iter()
+                    .find(|(name, _)| name == detector_name)
+                    .map(|(_, delta)| *delta);
+
                 // Show memory delta if available for this detector
-                if let Some(memory_delta) = memory_map.get(detector_name) {
+                if let Some(delta) = memory_delta {
                     println!(
-                        "  {}: {:.2}s, {}",
-                        detector_name,
-                        timing_sec,
-                        format_bytes(*memory_delta as u64)
+                        "  {detector_name}: {timing_sec:.2}s, {}",
+                        format_bytes(delta as u64)
                     );
                 } else {
-                    println!("  {}: {:.2}s", detector_name, timing_sec);
+                    println!("  {detector_name}: {timing_sec:.2}s");
                 }
             }
         }
