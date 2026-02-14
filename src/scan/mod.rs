@@ -6,6 +6,7 @@ pub mod docker;
 use serde::Serialize;
 
 use crate::config::Config;
+use crate::util::format_bytes;
 use detector::{Detector, DetectorResult, BloatEntry};
 
 #[derive(Serialize)]
@@ -14,6 +15,8 @@ pub struct ScanResult {
     pub diagnostics: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub detector_timings: Vec<(String, u128)>,
 }
 
 impl ScanResult {
@@ -22,6 +25,7 @@ impl ScanResult {
             entries: Vec::new(),
             diagnostics: Vec::new(),
             duration_ms: None,
+            detector_timings: Vec::new(),
         }
     }
 
@@ -41,16 +45,48 @@ pub fn run(config: &Config) -> ScanResult {
         Box::new(docker::DockerDetector),
     ];
 
+    scan_result.detector_timings.reserve(detectors.len());
+
     for detector in detectors {
+        let detector_name = detector.name();
+
         if !detector.available(config) {
-            scan_result.diagnostics.push(format!(
+            let msg = format!(
                 "{}: skipped (not available on this platform)",
-                detector.name()
-            ));
+                detector_name
+            );
+            if config.progressive {
+                eprintln!("{msg}");
+            }
+            scan_result.diagnostics.push(msg);
             continue;
         }
 
+        let detector_start = std::time::Instant::now();
         let result = detector.scan(config);
+        let detector_duration = detector_start.elapsed().as_millis();
+
+        scan_result.detector_timings.push((detector.name().to_string(), detector_duration));
+        if config.progressive {
+            eprintln!("Scanning {}...", detector_name);
+        }
+
+        let detector_start = std::time::Instant::now();
+        let result = detector.scan(config);
+        let detector_duration = detector_start.elapsed();
+
+        if config.progressive {
+            let count = result.entries.len();
+            let total_bytes: u64 = result.entries.iter().map(|e| e.size_bytes).sum();
+            eprintln!(
+                "{} complete: {} items, {}, {:.2}s",
+                detector_name,
+                count,
+                format_bytes(total_bytes),
+                detector_duration.as_secs_f64()
+            );
+        }
+
         scan_result.merge(result);
     }
 

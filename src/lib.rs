@@ -5,3 +5,4 @@ pub mod scan;
 pub mod report;
 pub mod clean;
 pub mod store;
+pub mod util;
