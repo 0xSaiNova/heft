@@ -10,6 +10,7 @@ pub struct Config {
     pub skip_docker: bool,
     pub json_output: bool,
     pub verbose: bool,
+    pub progressive: bool,
     pub platform: Platform,
 }
 
@@ -29,6 +30,7 @@ impl Config {
             skip_docker: args.no_docker,
             json_output: args.json,
             verbose: args.verbose,
+            progressive: args.progressive,
             platform,
         }
     }
@@ -45,6 +47,7 @@ impl Config {
             skip_docker: false,
             json_output: false,
             verbose: false,
+            progressive: false,
             platform,
         }
     }
