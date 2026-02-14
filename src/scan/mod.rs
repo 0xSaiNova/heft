@@ -43,20 +43,22 @@ pub fn run(config: &Config) -> ScanResult {
     ];
 
     for detector in detectors {
+        let detector_name = detector.name();
+
         if !detector.available(config) {
             let msg = format!(
                 "{}: skipped (not available on this platform)",
-                detector.name()
+                detector_name
             );
-            scan_result.diagnostics.push(msg.clone());
             if config.progressive {
                 eprintln!("{msg}");
             }
+            scan_result.diagnostics.push(msg);
             continue;
         }
 
         if config.progressive {
-            eprintln!("Scanning {}...", detector.name());
+            eprintln!("Scanning {}...", detector_name);
         }
 
         let detector_start = std::time::Instant::now();
@@ -68,7 +70,7 @@ pub fn run(config: &Config) -> ScanResult {
             let total_bytes: u64 = result.entries.iter().map(|e| e.size_bytes).sum();
             eprintln!(
                 "{} complete: {} items, {}, {:.2}s",
-                detector.name(),
+                detector_name,
                 count,
                 format_bytes(total_bytes),
                 detector_duration.as_secs_f64()
