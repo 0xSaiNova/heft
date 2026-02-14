@@ -32,6 +32,7 @@ fn empty_directory_returns_no_project_entries() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -61,6 +62,7 @@ fn detects_node_modules_in_project() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -94,6 +96,7 @@ fn detects_cargo_target_in_rust_project() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -130,6 +133,7 @@ fn skips_nested_node_modules_in_monorepo() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -162,6 +166,7 @@ fn detects_python_venv() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -194,6 +199,7 @@ fn detects_pytest_cache() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -225,6 +231,7 @@ fn falls_back_to_directory_name_when_manifest_has_no_name() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -256,6 +263,7 @@ fn does_not_detect_target_without_cargo_toml() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -280,6 +288,7 @@ fn scan_runs_without_panic() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -308,6 +317,7 @@ fn detects_cache_directory() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
@@ -328,6 +338,7 @@ fn cache_entries_have_correct_category() {
         skip_docker: true,
         json_output: false,
         verbose: false,
+        progressive: false,
         platform: Platform::Linux,
     };
 
