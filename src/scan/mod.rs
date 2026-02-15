@@ -82,6 +82,15 @@ pub fn run(config: &Config) -> ScanResult {
             eprintln!("Scanning {detector_name}...");
         }
 
+        // Sample memory BEFORE detector runs (if tracking enabled)
+        let memory_before = if peak_memory.is_some() {
+            memory_stats::memory_stats()
+                .map(|usage| usage.physical_mem)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
         // Run detector and measure timing
         let detector_start = std::time::Instant::now();
         let result = detector.scan(config);
@@ -90,12 +99,8 @@ pub fn run(config: &Config) -> ScanResult {
         // Store timing (always available)
         scan_result.detector_timings.push((detector_name.to_string(), detector_duration.as_millis()));
 
-        // Sample memory only if baseline sampling succeeded
+        // Sample memory AFTER detector completes (if tracking enabled)
         if peak_memory.is_some() {
-            let memory_before = memory_stats::memory_stats()
-                .map(|usage| usage.physical_mem)
-                .unwrap_or(0);
-
             let memory_after = memory_stats::memory_stats()
                 .map(|usage| usage.physical_mem)
                 .unwrap_or(0);

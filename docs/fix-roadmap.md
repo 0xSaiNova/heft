@@ -2,7 +2,7 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 11, 2026)
+## Status Summary (Updated: Feb 14, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
@@ -23,6 +23,14 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #54 - json error escaping (commit ae08a4d)
 - ✅ #58 - timeout unused (commit c25a815)
 - ✅ #60 - duration overflow + manifest size (commit c25a815)
+
+**Phase 4: COMPLETE ✅**
+- ✅ #39 - per-detector timing (commit 8d7b69d)
+- ✅ #25 - progressive output (commit 23286c5)
+
+**Phase 5: COMPLETE ✅**
+- ✅ #44 - memory monitoring (PR #73)
+- ✅ #43 - benchmarking suite (PR #74)
 
 ---
 
@@ -116,21 +124,29 @@ duration overflow (after 584 million years...) and manifest size checks. minor s
 
 **status: FIXED in commit c25a815 - changed duration_ms from u64 to u128 (prevents overflow), added 1MB size check before reading manifest files (prevents OOM). JSON escaping already fixed in #54.**
 
-## phase 4: improve user experience
+## phase 4: improve user experience ✅ COMPLETE
 
-### [#39](https://github.com/0xSaiNova/heft/issues/39) - per-detector timing
+### [#39](https://github.com/0xSaiNova/heft/issues/39) - per-detector timing ✅ FIXED
 show how long each detector takes. helps users understand why scans are slow and helps us optimize the right things.
 
-### [#25](https://github.com/0xSaiNova/heft/issues/25) - progressive output
+**status: fixed in commit 8d7b69d - added detector_timings field to ScanResult that tracks execution time for each detector. in verbose mode, shows timing breakdown after total scan time. always included in JSON output for scripting. changes in src/scan/mod.rs and src/report/mod.rs.**
+
+### [#25](https://github.com/0xSaiNova/heft/issues/25) - progressive output ✅ FIXED
 show results as each detector finishes instead of waiting for everything. big ux improvement for slow scans. uses the timing data from [#39](https://github.com/0xSaiNova/heft/issues/39).
 
-## phase 5: add observability
+**status: fixed in commit 23286c5 - added --progressive flag that displays real-time feedback as each detector runs. shows start message, completion summary with item count, size, and timing for each detector. progress messages go to stderr to preserve JSON output on stdout. created src/util.rs module to eliminate code duplication. changes in src/scan/mod.rs, src/cli.rs, src/config.rs, and src/report/table.rs.**
 
-### [#44](https://github.com/0xSaiNova/heft/issues/44) - memory monitoring
+## phase 5: add observability ✅ COMPLETE
+
+### [#44](https://github.com/0xSaiNova/heft/issues/44) - memory monitoring ✅ FIXED
 track memory usage during scans. keeps us honest about staying lightweight. stress-test.md says we should be tracking this.
 
-### [#43](https://github.com/0xSaiNova/heft/issues/43) - benchmarking suite
+**status: fixed in PR #73 - added memory-stats crate for cross-platform RSS tracking. track peak memory and per-detector memory deltas. sample at detector boundaries. display in verbose mode and JSON output. fixed bug where detectors were running twice per scan. changes in src/scan/mod.rs and src/report/mod.rs.**
+
+### [#43](https://github.com/0xSaiNova/heft/issues/43) - benchmarking suite ✅ FIXED
 automated performance tests to catch regressions. needs [#39](https://github.com/0xSaiNova/heft/issues/39) and [#44](https://github.com/0xSaiNova/heft/issues/44) to be useful since those are the metrics we want to track.
+
+**status: fixed in PR #74 - comprehensive benchmarking suite using Criterion.rs. benchmarks: small scan, node_modules (3 depth levels), rust project, deep tree, caches, memory validation, timing validation. realistic fixture generation via tempfile. CI integration with GitHub Actions. results in target/criterion/ with HTML reports. changes in benches/scan_performance.rs and .github/workflows/benchmark.yml.**
 
 ## phase 6: snapshot features (v0.4)
 
