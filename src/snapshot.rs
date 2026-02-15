@@ -74,17 +74,23 @@ pub fn open_db() -> Result<Connection, Box<dyn std::error::Error>> {
 
 /// Save a scan result as a snapshot
 pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Error>> {
-    let conn = open_db()?;
+    let mut conn = open_db()?;
 
-    // Calculate totals
-    let total_bytes: u64 = result.entries.iter().map(|e| e.size_bytes).sum();
-    let reclaimable_bytes: u64 = result.entries.iter().map(|e| e.reclaimable_bytes).sum();
+    // Calculate totals in single pass (optimization: avoid double iteration)
+    let (total_bytes, reclaimable_bytes) = result.entries.iter()
+        .fold((0u64, 0u64), |(total, reclaimable), entry| {
+            (total + entry.size_bytes, reclaimable + entry.reclaimable_bytes)
+        });
+
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs() as i64;
 
+    // Use transaction for batch inserts (optimization: ~10x faster)
+    let tx = conn.transaction()?;
+
     // Insert snapshot
-    conn.execute(
+    tx.execute(
         "INSERT INTO snapshots (timestamp, total_bytes, reclaimable_bytes, scan_duration_ms, peak_memory_bytes)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
@@ -96,9 +102,15 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
         ],
     )?;
 
-    let snapshot_id = conn.last_insert_rowid();
+    let snapshot_id = tx.last_insert_rowid();
 
-    // Insert entries
+    // Prepare statement once, reuse for all entries (optimization: avoid re-parsing SQL)
+    let mut stmt = tx.prepare_cached(
+        "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+    )?;
+
+    // Insert entries in batch
     for entry in &result.entries {
         let location_str = match &entry.location {
             Location::FilesystemPath(p) => p.to_string_lossy().to_string(),
@@ -106,21 +118,20 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
             Location::Aggregate(name) => format!("aggregate:{name}"),
         };
 
-        conn.execute(
-            "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![
-                snapshot_id,
-                entry.category.as_str(),
-                entry.name,
-                location_str,
-                entry.size_bytes as i64,
-                entry.reclaimable_bytes as i64,
-                entry.last_modified,
-                entry.cleanup_hint.as_deref()
-            ],
-        )?;
+        stmt.execute(params![
+            snapshot_id,
+            entry.category.as_str(),
+            entry.name,
+            location_str,
+            entry.size_bytes as i64,
+            entry.reclaimable_bytes as i64,
+            entry.last_modified,
+            entry.cleanup_hint.as_deref()
+        ])?;
     }
+
+    drop(stmt);
+    tx.commit()?;
 
     Ok(snapshot_id)
 }
