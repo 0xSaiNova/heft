@@ -54,9 +54,9 @@ pub struct ScanArgs {
 
 #[derive(Parser)]
 pub struct ReportArgs {
-    /// Show most recent snapshot (default behavior)
-    #[arg(long, default_value_t = true)]
-    pub latest: bool,
+    /// List all snapshots
+    #[arg(long, default_value_t = false)]
+    pub list: bool,
 
     /// Show a specific snapshot by ID
     #[arg(long)]
