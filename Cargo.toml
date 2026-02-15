@@ -26,8 +26,23 @@ serde_json = "1"
 # std::fs::read_dir is too low level, walkdir handles recursion and symlink policy
 walkdir = "2"
 
+# memory usage monitoring for observability and staying lightweight
+# provides cross-platform RSS tracking without heavy dependencies
+memory-stats = "1.0"
+
 [dev-dependencies]
+# criterion for detailed benchmarking with statistical analysis
+# provides regression detection and comparison across runs
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# tempfile for creating isolated benchmark fixtures
+# needed to generate realistic directory structures for testing
+tempfile = "3"
 
 [[bin]]
 name = "heft"
 path = "src/main.rs"
+
+[[bench]]
+name = "scan_performance"
+harness = false
