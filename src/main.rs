@@ -6,6 +6,112 @@ use heft::report;
 use heft::clean;
 use heft::snapshot;
 use heft::util;
+use heft::store::diff::{DiffResult, DiffType};
+use heft::scan::detector::BloatCategory;
+use std::collections::HashMap;
+
+fn print_diff(result: &DiffResult) {
+    // format timestamps
+    let from_date = chrono::DateTime::from_timestamp(result.from_timestamp, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let to_date = chrono::DateTime::from_timestamp(result.to_timestamp, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    println!("\nComparing snapshots:");
+    println!("  From: #{} ({})", result.from_id, from_date);
+    println!("  To:   #{} ({})", result.to_id, to_date);
+    println!();
+
+    if result.entries.is_empty() {
+        println!("No changes detected.");
+        return;
+    }
+
+    // group entries by category
+    let mut by_category: HashMap<BloatCategory, Vec<&heft::store::diff::DiffEntry>> = HashMap::new();
+    for entry in &result.entries {
+        by_category.entry(entry.category).or_default().push(entry);
+    }
+
+    // sort categories for consistent output
+    let mut categories: Vec<_> = by_category.keys().collect();
+    categories.sort_by_key(|c| format!("{:?}", c));
+
+    // print by category
+    for category in categories {
+        let entries = by_category.get(category).unwrap();
+
+        println!("{}:", format!("{:?}", category));
+
+        // separate by diff type
+        let mut grew: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Grew)).collect();
+        let mut shrank: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Shrank)).collect();
+        let mut new: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::New)).collect();
+        let mut gone: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Gone)).collect();
+
+        // sort by absolute delta (biggest changes first)
+        grew.sort_by_key(|e| -(e.delta));
+        shrank.sort_by_key(|e| e.delta); // already negative, so smallest (most negative) first
+        new.sort_by_key(|e| -(e.delta));
+        gone.sort_by_key(|e| e.delta);
+
+        // print grew
+        if !grew.is_empty() {
+            for entry in grew {
+                println!("  📈 {} grew {} → {} (+{})",
+                    entry.name,
+                    util::format_bytes(entry.old_size),
+                    util::format_bytes(entry.new_size),
+                    util::format_bytes(entry.delta as u64)
+                );
+            }
+        }
+
+        // print shrank
+        if !shrank.is_empty() {
+            for entry in shrank {
+                println!("  📉 {} shrank {} → {} ({})",
+                    entry.name,
+                    util::format_bytes(entry.old_size),
+                    util::format_bytes(entry.new_size),
+                    util::format_bytes((-entry.delta) as u64)
+                );
+            }
+        }
+
+        // print new
+        if !new.is_empty() {
+            for entry in new {
+                println!("  🆕 {} appeared ({})",
+                    entry.name,
+                    util::format_bytes(entry.new_size)
+                );
+            }
+        }
+
+        // print gone
+        if !gone.is_empty() {
+            for entry in gone {
+                println!("  ✅ {} cleaned up (was {})",
+                    entry.name,
+                    util::format_bytes(entry.old_size)
+                );
+            }
+        }
+
+        println!();
+    }
+
+    // net change summary
+    println!("Net change: {}", if result.net_change >= 0 {
+        format!("+{} of new bloat", util::format_bytes(result.net_change as u64))
+    } else {
+        format!("{} freed", util::format_bytes((-result.net_change) as u64))
+    });
+}
 
 fn main() {
     let cli = Cli::parse();
@@ -165,7 +271,71 @@ fn main() {
             }
         }
         Command::Diff(args) => {
-            println!("diff: from={:?}, to={:?}", args.from, args.to);
+            use heft::store::diff;
+
+            // determine which snapshots to compare
+            let (from_id, to_id) = if let (Some(from_str), Some(to_str)) = (&args.from, &args.to) {
+                // explicit snapshot IDs provided
+                let from: i64 = from_str.parse().unwrap_or_else(|_| {
+                    eprintln!("Invalid 'from' snapshot ID: '{}'. Must be a number.", from_str);
+                    std::process::exit(1);
+                });
+                let to: i64 = to_str.parse().unwrap_or_else(|_| {
+                    eprintln!("Invalid 'to' snapshot ID: '{}'. Must be a number.", to_str);
+                    std::process::exit(1);
+                });
+                (from, to)
+            } else {
+                // default: compare two most recent snapshots
+                match snapshot::list_snapshots() {
+                    Ok(snapshots) => {
+                        if snapshots.len() < 2 {
+                            eprintln!("Need at least 2 snapshots to compare. Run 'heft scan' a few times.");
+                            std::process::exit(1);
+                        }
+                        // snapshots are ordered by timestamp DESC, so [0] is newest
+                        (snapshots[1].id, snapshots[0].id)
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading snapshots: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            };
+
+            // load both snapshots
+            let from_snapshot = snapshot::get_snapshot(from_id)
+                .expect("Failed to load 'from' snapshot")
+                .unwrap_or_else(|| {
+                    eprintln!("Snapshot {from_id} not found");
+                    std::process::exit(1);
+                });
+
+            let to_snapshot = snapshot::get_snapshot(to_id)
+                .expect("Failed to load 'to' snapshot")
+                .unwrap_or_else(|| {
+                    eprintln!("Snapshot {to_id} not found");
+                    std::process::exit(1);
+                });
+
+            // load entries for both snapshots
+            let from_entries = snapshot::load_snapshot_entries(from_id)
+                .expect("Failed to load entries for 'from' snapshot");
+            let to_entries = snapshot::load_snapshot_entries(to_id)
+                .expect("Failed to load entries for 'to' snapshot");
+
+            // compare
+            let diff_result = diff::compare_entries(
+                &from_entries,
+                &to_entries,
+                from_id,
+                to_id,
+                from_snapshot.timestamp,
+                to_snapshot.timestamp,
+            );
+
+            // format and print
+            print_diff(&diff_result);
         }
     }
 }
