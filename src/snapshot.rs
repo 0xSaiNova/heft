@@ -10,7 +10,7 @@ pub struct Snapshot {
     pub timestamp: i64,
     pub total_bytes: u64,
     pub reclaimable_bytes: u64,
-    pub scan_duration_ms: u128,
+    pub scan_duration_ms: u64,
     pub peak_memory_bytes: Option<usize>,
 }
 
@@ -95,10 +95,10 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
             timestamp,
-            total_bytes as i64,
-            reclaimable_bytes as i64,
-            result.duration_ms.unwrap_or(0) as i64,
-            result.peak_memory_bytes.map(|m| m as i64)
+            i64::try_from(total_bytes).unwrap_or(i64::MAX),
+            i64::try_from(reclaimable_bytes).unwrap_or(i64::MAX),
+            i64::try_from(result.duration_ms.unwrap_or(0)).unwrap_or(i64::MAX),
+            result.peak_memory_bytes.map(|m| i64::try_from(m).unwrap_or(i64::MAX))
         ],
     )?;
 
@@ -123,8 +123,8 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
             entry.category.as_str(),
             entry.name,
             location_str,
-            entry.size_bytes as i64,
-            entry.reclaimable_bytes as i64,
+            i64::try_from(entry.size_bytes).unwrap_or(i64::MAX),
+            i64::try_from(entry.reclaimable_bytes).unwrap_or(i64::MAX),
             entry.last_modified,
             entry.cleanup_hint.as_deref()
         ])?;
@@ -149,10 +149,10 @@ pub fn list_snapshots() -> Result<Vec<Snapshot>, Box<dyn std::error::Error>> {
         Ok(Snapshot {
             id: row.get(0)?,
             timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)? as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)? as u64,
-            scan_duration_ms: row.get::<_, i64>(4)? as u128,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m as usize),
+            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
+            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
+            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
         })
     })?
     .collect::<Result<Vec<_>, _>>()?;
@@ -175,10 +175,10 @@ pub fn get_snapshot(id: i64) -> Result<Option<Snapshot>, Box<dyn std::error::Err
         Ok(Some(Snapshot {
             id: row.get(0)?,
             timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)? as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)? as u64,
-            scan_duration_ms: row.get::<_, i64>(4)? as u128,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m as usize),
+            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
+            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
+            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
         }))
     } else {
         Ok(None)
@@ -201,10 +201,10 @@ pub fn get_latest_snapshot() -> Result<Option<Snapshot>, Box<dyn std::error::Err
         Ok(Some(Snapshot {
             id: row.get(0)?,
             timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)? as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)? as u64,
-            scan_duration_ms: row.get::<_, i64>(4)? as u128,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m as usize),
+            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
+            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
+            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
         }))
     } else {
         Ok(None)
@@ -247,8 +247,8 @@ pub fn load_snapshot_entries(snapshot_id: i64) -> Result<Vec<BloatEntry>, Box<dy
             category,
             name: row.get(1)?,
             location,
-            size_bytes: row.get::<_, i64>(3)? as u64,
-            reclaimable_bytes: row.get::<_, i64>(4)? as u64,
+            size_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+            reclaimable_bytes: row.get::<_, i64>(4)?.max(0) as u64,
             last_modified: row.get(5)?,
             cleanup_hint: row.get(6)?,
         })

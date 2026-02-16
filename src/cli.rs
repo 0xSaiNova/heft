@@ -84,10 +84,6 @@ pub struct CleanArgs {
 
 #[derive(Parser)]
 pub struct DiffArgs {
-    /// Compare the two most recent snapshots (default behavior)
-    #[arg(long, default_value_t = true)]
-    pub last: bool,
-
     /// Starting snapshot ID for comparison
     #[arg(long)]
     pub from: Option<String>,
