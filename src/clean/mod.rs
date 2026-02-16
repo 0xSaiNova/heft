@@ -16,6 +16,7 @@ use std::process::Command;
 
 use crate::platform;
 use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
+use crate::util;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum CleanMode {
@@ -89,7 +90,7 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
             let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
 
             println!("\nFound {} reclaimable across {} categories:\n",
-                format_size(total_bytes), by_category.len());
+                util::format_bytes(total_bytes), by_category.len());
 
             // sort categories for consistent display order
             let mut categories: Vec<_> = by_category.iter().collect();
@@ -101,8 +102,8 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
                 let cat_items = entries.len();
 
                 println!("{}: {} ({} items)",
-                    category_display(category),
-                    format_size(cat_bytes),
+                    category.as_str(),
+                    util::format_bytes(cat_bytes),
                     cat_items);
 
                 print!("  Delete? [y/n]: ");
@@ -138,7 +139,7 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
             }
 
             if clean_result.bytes_freed > 0 {
-                println!("Freed {}", format_size(clean_result.bytes_freed));
+                println!("Freed {}", util::format_bytes(clean_result.bytes_freed));
             }
         }
         CleanMode::Execute => {
@@ -343,17 +344,6 @@ fn location_display(location: &Location) -> String {
     }
 }
 
-fn category_display(category: &BloatCategory) -> String {
-    match category {
-        BloatCategory::ProjectArtifacts => "ProjectArtifacts".to_string(),
-        BloatCategory::PackageCache => "PackageCache".to_string(),
-        BloatCategory::ContainerData => "ContainerData".to_string(),
-        BloatCategory::IdeData => "IdeData".to_string(),
-        BloatCategory::SystemCache => "SystemCache".to_string(),
-        BloatCategory::Other => "Other".to_string(),
-    }
-}
-
 fn category_sort_order(category: &BloatCategory) -> u8 {
     match category {
         BloatCategory::ProjectArtifacts => 0,
@@ -365,18 +355,3 @@ fn category_sort_order(category: &BloatCategory) -> u8 {
     }
 }
 
-fn format_size(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-
-    if bytes >= GB {
-        format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes} B")
-    }
-}

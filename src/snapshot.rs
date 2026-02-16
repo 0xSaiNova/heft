@@ -136,6 +136,17 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
     Ok(snapshot_id)
 }
 
+fn snapshot_from_row(row: &rusqlite::Row) -> rusqlite::Result<Snapshot> {
+    Ok(Snapshot {
+        id: row.get(0)?,
+        timestamp: row.get(1)?,
+        total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
+        reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
+        scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
+        peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
+    })
+}
+
 /// List all snapshots
 pub fn list_snapshots() -> Result<Vec<Snapshot>, Box<dyn std::error::Error>> {
     let conn = open_db()?;
@@ -145,17 +156,8 @@ pub fn list_snapshots() -> Result<Vec<Snapshot>, Box<dyn std::error::Error>> {
          ORDER BY timestamp DESC"
     )?;
 
-    let snapshots = stmt.query_map([], |row| {
-        Ok(Snapshot {
-            id: row.get(0)?,
-            timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
-            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
-        })
-    })?
-    .collect::<Result<Vec<_>, _>>()?;
+    let snapshots = stmt.query_map([], snapshot_from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(snapshots)
 }
@@ -172,14 +174,7 @@ pub fn get_snapshot(id: i64) -> Result<Option<Snapshot>, Box<dyn std::error::Err
     let mut rows = stmt.query(params![id])?;
 
     if let Some(row) = rows.next()? {
-        Ok(Some(Snapshot {
-            id: row.get(0)?,
-            timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
-            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
-        }))
+        Ok(Some(snapshot_from_row(row)?))
     } else {
         Ok(None)
     }
@@ -198,14 +193,7 @@ pub fn get_latest_snapshot() -> Result<Option<Snapshot>, Box<dyn std::error::Err
     let mut rows = stmt.query([])?;
 
     if let Some(row) = rows.next()? {
-        Ok(Some(Snapshot {
-            id: row.get(0)?,
-            timestamp: row.get(1)?,
-            total_bytes: row.get::<_, i64>(2)?.max(0) as u64,
-            reclaimable_bytes: row.get::<_, i64>(3)?.max(0) as u64,
-            scan_duration_ms: row.get::<_, i64>(4)?.max(0) as u64,
-            peak_memory_bytes: row.get::<_, Option<i64>>(5)?.map(|m| m.max(0) as usize),
-        }))
+        Ok(Some(snapshot_from_row(row)?))
     } else {
         Ok(None)
     }

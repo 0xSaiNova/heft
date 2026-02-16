@@ -6,20 +6,9 @@ use heft::report;
 use heft::clean;
 use heft::snapshot;
 use heft::util;
-use heft::store::diff::{DiffResult, DiffType};
 use heft::scan::detector::BloatCategory;
+use heft::store::diff::{DiffResult, DiffType};
 use std::collections::HashMap;
-
-fn category_label(cat: &BloatCategory) -> &'static str {
-    match cat {
-        BloatCategory::ProjectArtifacts => "Project Artifacts",
-        BloatCategory::ContainerData => "Container Data",
-        BloatCategory::PackageCache => "Package Cache",
-        BloatCategory::IdeData => "IDE Data",
-        BloatCategory::SystemCache => "System Cache",
-        BloatCategory::Other => "Other",
-    }
-}
 
 fn print_diff(result: &DiffResult) {
     let from_date = chrono::DateTime::from_timestamp(result.from_timestamp, 0)
@@ -48,12 +37,12 @@ fn print_diff(result: &DiffResult) {
 
     // sort categories for consistent output
     let mut categories: Vec<_> = by_category.keys().collect();
-    categories.sort_by_key(|c| category_label(c));
+    categories.sort_by_key(|c| c.label());
 
     for category in categories {
         let Some(entries) = by_category.get(category) else { continue };
 
-        println!("{}:", category_label(category));
+        println!("{}:", category.label());
 
         let mut grew: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Grew)).collect();
         let mut shrank: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Shrank)).collect();

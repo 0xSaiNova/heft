@@ -24,6 +24,17 @@ impl BloatCategory {
             BloatCategory::Other => "Other",
         }
     }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            BloatCategory::ProjectArtifacts => "Project Artifacts",
+            BloatCategory::ContainerData => "Container Data",
+            BloatCategory::PackageCache => "Package Cache",
+            BloatCategory::IdeData => "IDE Data",
+            BloatCategory::SystemCache => "System Cache",
+            BloatCategory::Other => "Other",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
