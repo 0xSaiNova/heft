@@ -30,6 +30,18 @@ walkdir = "2"
 # provides cross-platform RSS tracking without heavy dependencies
 memory-stats = "1.0"
 
+# sqlite for snapshot storage and historical tracking
+# lightweight embedded database for persisting scan results
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# cross-platform directory paths (data dir for database storage)
+# provides standard locations like ~/.local/share on Linux, ~/Library/Application Support on macOS
+directories = "5"
+
+# datetime formatting for snapshot timestamps
+# convert unix timestamps to human-readable dates
+chrono = "0.4"
+
 [dev-dependencies]
 # criterion for detailed benchmarking with statistical analysis
 # provides regression detection and comparison across runs

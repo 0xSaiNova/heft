@@ -2,7 +2,7 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 14, 2026)
+## Status Summary (Updated: Feb 15, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
@@ -31,6 +31,10 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 **Phase 5: COMPLETE ✅**
 - ✅ #44 - memory monitoring (PR #73)
 - ✅ #43 - benchmarking suite (PR #74)
+
+**Phase 6: COMPLETE ✅ (v0.4)**
+- ✅ #6 - sqlite snapshot storage (commits 8072a16, 0ca24f9)
+- ✅ #7 - diff engine (full implementation with testing)
 
 ---
 
@@ -148,15 +152,19 @@ automated performance tests to catch regressions. needs [#39](https://github.com
 
 **status: fixed in PR #74 - comprehensive benchmarking suite using Criterion.rs. benchmarks: small scan, node_modules (3 depth levels), rust project, deep tree, caches, memory validation, timing validation. realistic fixture generation via tempfile. CI integration with GitHub Actions. results in target/criterion/ with HTML reports. changes in benches/scan_performance.rs and .github/workflows/benchmark.yml.**
 
-## phase 6: snapshot features (v0.4)
+## phase 6: snapshot features (v0.4) ✅ COMPLETE
 
-### [#6](https://github.com/0xSaiNova/heft/issues/6) - sqlite snapshot storage
+### [#6](https://github.com/0xSaiNova/heft/issues/6) - sqlite snapshot storage ✅ COMPLETE
 save scan results to a database so we can compare over time. this is the killer feature that makes heft different from other tools. vision doc v0.4 milestone.
 
-### [#7](https://github.com/0xSaiNova/heft/issues/7) - diff engine
+**status: COMPLETE - implemented in commits 8072a16 and 0ca24f9. snapshots auto-save after every scan to ~/.local/share/heft/heft.db. `heft report --list` shows all snapshots. `heft report --id N` displays a specific snapshot. uses rusqlite with bundled sqlite. transaction-based saves with single-pass totals calculation for performance. schema includes snapshots table (metadata) and entries table (individual bloat items). changes in src/snapshot.rs and src/store/mod.rs.**
+
+### [#7](https://github.com/0xSaiNova/heft/issues/7) - diff engine ✅ COMPLETE
 compare two snapshots to see what grew or shrank. depends on [#6](https://github.com/0xSaiNova/heft/issues/6) obviously. completes the "track changes over time" story.
 
-**milestone: with these we hit v0.4**
+**status: COMPLETE - implemented compare_entries() function that matches by category and name, tracks four change types (grew, shrank, new, gone), calculates net change. CLI supports --last (default) and --from/--to flags. output groups by category with sorted entries showing biggest changes first. comprehensive error handling for invalid IDs and missing snapshots. all tests passing. changes in src/store/diff.rs and src/main.rs.**
+
+**milestone: v0.4 COMPLETE - snapshot storage and diff engine both shipped**
 
 ## phase 7: polish
 

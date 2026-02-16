@@ -6,3 +6,4 @@ pub mod report;
 pub mod clean;
 pub mod store;
 pub mod util;
+pub mod snapshot;

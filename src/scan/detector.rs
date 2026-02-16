@@ -13,6 +13,19 @@ pub enum BloatCategory {
     Other,
 }
 
+impl BloatCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BloatCategory::ProjectArtifacts => "ProjectArtifacts",
+            BloatCategory::ContainerData => "ContainerData",
+            BloatCategory::PackageCache => "PackageCache",
+            BloatCategory::IdeData => "IdeData",
+            BloatCategory::SystemCache => "SystemCache",
+            BloatCategory::Other => "Other",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Location {
     FilesystemPath(PathBuf),
