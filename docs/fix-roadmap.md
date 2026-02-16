@@ -168,8 +168,10 @@ compare two snapshots to see what grew or shrank. depends on [#6](https://github
 
 ## phase 7: polish
 
-### [#48](https://github.com/0xSaiNova/heft/issues/48) - implement Default trait
+### [#48](https://github.com/0xSaiNova/heft/issues/48) - implement Default trait ✅ FIXED
 clippy complains about our default() method. should implement the trait properly. just good housekeeping, not urgent.
+
+**status: FIXED - moved Config::default() to a proper Default trait impl. clippy clean.**
 
 ### [#4](https://github.com/0xSaiNova/heft/issues/4) - verify tui table status ✅ FIXED
 table output is working. closed Feb 9.

@@ -35,7 +35,10 @@ impl Config {
         }
     }
 
-    pub fn default() -> Self {
+}
+
+impl Default for Config {
+    fn default() -> Self {
         let platform = platform::detect();
         let roots = platform::home_dir()
             .map(|h| vec![h])
