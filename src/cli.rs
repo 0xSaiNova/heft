@@ -46,13 +46,17 @@ pub struct ScanArgs {
     /// Show detailed output including diagnostics
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
+
+    /// Show progressive output as each detector completes
+    #[arg(long, default_value_t = false)]
+    pub progressive: bool,
 }
 
 #[derive(Parser)]
 pub struct ReportArgs {
-    /// Show most recent snapshot (default behavior)
-    #[arg(long, default_value_t = true)]
-    pub latest: bool,
+    /// List all snapshots
+    #[arg(long, default_value_t = false)]
+    pub list: bool,
 
     /// Show a specific snapshot by ID
     #[arg(long)]
@@ -80,10 +84,6 @@ pub struct CleanArgs {
 
 #[derive(Parser)]
 pub struct DiffArgs {
-    /// Compare the two most recent snapshots (default behavior)
-    #[arg(long, default_value_t = true)]
-    pub last: bool,
-
     /// Starting snapshot ID for comparison
     #[arg(long)]
     pub from: Option<String>,

@@ -1,6 +1,6 @@
 [package]
 name = "heft"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.75"
 description = "A disk space auditor for developers that identifies reclaimable build artifacts, caches, and container data"
@@ -26,8 +26,35 @@ serde_json = "1"
 # std::fs::read_dir is too low level, walkdir handles recursion and symlink policy
 walkdir = "2"
 
+# memory usage monitoring for observability and staying lightweight
+# provides cross-platform RSS tracking without heavy dependencies
+memory-stats = "1.0"
+
+# sqlite for snapshot storage and historical tracking
+# lightweight embedded database for persisting scan results
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# cross-platform directory paths (data dir for database storage)
+# provides standard locations like ~/.local/share on Linux, ~/Library/Application Support on macOS
+directories = "5"
+
+# datetime formatting for snapshot timestamps
+# convert unix timestamps to human-readable dates
+chrono = "0.4"
+
 [dev-dependencies]
+# criterion for detailed benchmarking with statistical analysis
+# provides regression detection and comparison across runs
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# tempfile for creating isolated benchmark fixtures
+# needed to generate realistic directory structures for testing
+tempfile = "3"
 
 [[bin]]
 name = "heft"
 path = "src/main.rs"
+
+[[bench]]
+name = "scan_performance"
+harness = false

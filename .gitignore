@@ -10,10 +10,7 @@
 .vscode/
 *.iml
 claude.md
-project-setup-spec.md
-proj\ docs/
+
+proj docs/
 docs/spec/
 docs/internal/
-*.cplan
-*plan*.md
-plan.md

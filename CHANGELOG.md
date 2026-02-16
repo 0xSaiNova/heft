@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-15
+
+### Added
+- SQLite snapshot storage - every scan auto-saves to `~/.local/share/heft/heft.db`
+- `heft report --list` to view all saved snapshots
+- `heft report --id N` to replay a specific snapshot
+- `heft diff` to compare the two most recent snapshots
+- `heft diff --from N --to M` to compare specific snapshots
+- Diff engine tracks four change types: grew, shrank, new, gone
+- Per-detector timing in verbose mode and JSON output
+- Progressive output with `--progressive` flag
+- Memory monitoring with peak RSS and per-detector deltas
+- Benchmarking suite with Criterion
+
+### Changed
+- Snapshot duration type from u128 to u64 (matches SQLite storage)
+- Diff output uses plain text markers instead of unicode emojis
+- Category labels in diff output use human-readable names
+
+### Fixed
+- Integer truncation when storing u64 values in SQLite (now uses try_from with safe fallback)
+- Negative values from SQLite reads now clamped to zero
+- `heft report --id abc` no longer panics (proper error message and exit)
+- `heft diff` no longer panics on database errors (proper error handling throughout)
+- Removed dead `--last` flag from diff command
+- Removed conflicting stub code in store module
+- Report command no longer loads snapshot entries twice
+- `--from` and `--to` flags now validated to be used together
+
 ## [0.3.0] - 2026-02-12
 
 ### Added
