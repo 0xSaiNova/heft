@@ -102,9 +102,14 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     });
 
     // pnpm store
+    let pnpm_path = match platform {
+        Platform::MacOS => home.join("Library/pnpm/store"),
+        Platform::Windows => home.join("AppData").join("Local").join("pnpm").join("store"),
+        Platform::Linux | Platform::Unknown => home.join(".local/share/pnpm/store"),
+    };
     locations.push(CacheLocation {
         name: "pnpm store",
-        path: home.join(".local/share/pnpm/store"),
+        path: pnpm_path,
         category: BloatCategory::PackageCache,
         cleanup_hint: "pnpm store prune",
     });
@@ -112,7 +117,8 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // pip cache
     let pip_path = match platform {
         Platform::MacOS => home.join("Library/Caches/pip"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".cache/pip"),
+        Platform::Windows => home.join("AppData").join("Local").join("pip").join("Cache"),
+        Platform::Linux | Platform::Unknown => home.join(".cache/pip"),
     };
     locations.push(CacheLocation {
         name: "pip cache",
@@ -164,7 +170,8 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // VS Code extensions and cache
     let vscode_path = match platform {
         Platform::MacOS => home.join("Library/Application Support/Code"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".config/Code"),
+        Platform::Windows => home.join("AppData").join("Roaming").join("Code"),
+        Platform::Linux | Platform::Unknown => home.join(".config/Code"),
     };
     locations.push(CacheLocation {
         name: "vscode data",
