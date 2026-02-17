@@ -2,6 +2,7 @@ pub mod detector;
 pub mod projects;
 pub mod caches;
 pub mod docker;
+pub mod xcode;
 
 use std::path::Path;
 
@@ -52,6 +53,7 @@ pub fn run(config: &Config) -> ScanResult {
         Box::new(projects::ProjectDetector),
         Box::new(caches::CacheDetector),
         Box::new(docker::DockerDetector),
+        Box::new(xcode::XcodeDetector),
     ];
 
     // Reserve space for per-detector metrics
