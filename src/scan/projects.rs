@@ -81,7 +81,7 @@ fn scan_directory(
                 continue;
             }
 
-            match calculate_dir_size(path) {
+            match super::calculate_dir_size(path) {
                 Ok((size, warnings)) => {
                     let project_name = determine_project_name(project_root, &artifact);
                     let last_modified = get_source_last_modified(project_root);
@@ -229,19 +229,27 @@ fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
         }
     });
 
-    // check for xcode project file in parent directories
-    let has_xcode_project = parent.ancestors().any(|ancestor| {
-        if let Ok(entries) = std::fs::read_dir(ancestor) {
-            entries.flatten().any(|e| {
-                e.path().extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|s| s == "xcodeproj" || s == "xcworkspace")
-                    .unwrap_or(false)
-            })
-        } else {
-            false
-        }
-    });
+    // check for xcode project file in parent directories.
+    // bounded to home directory and capped at 10 levels to avoid walking
+    // all the way up to / and calling read_dir on every ancestor.
+    let home = crate::platform::home_dir();
+    let has_xcode_project = parent.ancestors()
+        .take_while(|ancestor| {
+            home.as_deref().map(|h| *ancestor != h).unwrap_or(true)
+        })
+        .take(10)
+        .any(|ancestor| {
+            if let Ok(entries) = std::fs::read_dir(ancestor) {
+                entries.flatten().any(|e| {
+                    e.path().extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|s| s == "xcodeproj" || s == "xcworkspace")
+                        .unwrap_or(false)
+                })
+            } else {
+                false
+            }
+        });
 
     // check for xcode-specific subdirectories in DerivedData
     let has_xcode_markers = path.join("Build").exists()
@@ -263,56 +271,6 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
             !matches!(s, ".venv" | ".pytest_cache" | ".mypy_cache" | ".tox" | ".gradle")
         })
         .unwrap_or(false)
-}
-
-fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error> {
-    let mut total = 0u64;
-    let mut warnings = Vec::new();
-    let mut overflowed = false;
-
-    for entry in WalkDir::new(path).follow_links(false).into_iter() {
-        match entry {
-            Ok(entry) => {
-                if entry.file_type().is_file() {
-                    match entry.metadata() {
-                        Ok(metadata) => {
-                            let file_size = metadata.len();
-                            match total.checked_add(file_size) {
-                                Some(new_total) => total = new_total,
-                                None => {
-                                    if !overflowed {
-                                        warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
-                                        overflowed = true;
-                                    }
-                                    total = u64::MAX;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warnings.push(format!("failed to read metadata for {}: {}",
-                                entry.path().display(), e));
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                let path_str = e.path()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "unknown path".to_string());
-
-                if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {path_str}"));
-                } else if e.loop_ancestor().is_some() {
-                    warnings.push(format!("symlink loop detected: {path_str}"));
-                } else {
-                    // other errors: I/O errors, invalid UTF-8, filesystem issues
-                    warnings.push(format!("failed to traverse {path_str}: {e}"));
-                }
-            }
-        }
-    }
-
-    Ok((total, warnings))
 }
 
 fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> String {
@@ -393,23 +351,26 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
     let mut latest: Option<SystemTime> = None;
     let source_extensions = ["rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift"];
 
-    // only check top few levels, dont need to go deep
+    // only check top few levels, dont need to go deep.
+    // filter_entry prunes descent into artifact directories entirely, not just
+    // skips their entry. using continue here would skip the entry but still
+    // let walkdir descend into it (scanning thousands of files for nothing).
     for entry in WalkDir::new(project_root)
         .max_depth(3)
         .follow_links(false)
         .into_iter()
+        .filter_entry(|e| {
+            if !e.file_type().is_dir() {
+                return true;
+            }
+            e.file_name().to_str()
+                .map(|s| !matches!(s, "node_modules" | "target" | ".venv" | "venv" | "vendor" | "__pycache__" | "build" | "dist"))
+                .unwrap_or(true)
+        })
         .filter_map(|e| e.ok())
     {
-        let path = entry.path();
-
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if matches!(name, "node_modules" | "target" | ".venv" | "venv" | "vendor" | "__pycache__" | "build" | "dist") {
-                continue;
-            }
-        }
-
         if entry.file_type().is_file() {
-            let is_source = path.extension()
+            let is_source = entry.path().extension()
                 .and_then(|e| e.to_str())
                 .map(|ext| source_extensions.contains(&ext))
                 .unwrap_or(false);

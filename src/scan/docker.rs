@@ -17,7 +17,9 @@
 //!
 //! Does not walk Docker's internal storage directories directly.
 
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use std::fs;
 use serde::Deserialize;
 
@@ -42,7 +44,7 @@ impl Detector for DockerDetector {
     }
 
     fn available(&self, config: &Config) -> bool {
-        !config.skip_docker && platform::docker_available()
+        !config.skip_docker
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {
@@ -68,22 +70,47 @@ impl Detector for DockerDetector {
 }
 
 fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
-    let output = Command::new("docker")
+    let mut child = Command::new("docker")
         .arg("system")
         .arg("df")
         .arg("--format")
         .arg("json")
-        .output();
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "docker: not installed".to_string()
+            } else {
+                format!("docker: failed to run command: {e}")
+            }
+        })?;
 
-    let output = match output {
-        Ok(o) => o,
-        Err(e) => {
-            return Err(format!("docker: failed to run command: {e}"));
+    let start = Instant::now();
+
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if start.elapsed() > config.timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "docker: timed out after {} seconds (is Docker Desktop starting?)",
+                        config.timeout.as_secs()
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("docker: failed to wait for process: {e}")),
         }
     };
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !status.success() {
+        let mut stderr = String::new();
+        if let Some(mut pipe) = child.stderr.take() {
+            let _ = pipe.read_to_string(&mut stderr);
+        }
 
         // check for common error patterns
         if stderr.contains("Cannot connect to the Docker daemon")
@@ -98,7 +125,12 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
         return Err(format!("docker: command failed: {}", stderr.trim()));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut raw_stdout = String::new();
+    if let Some(mut pipe) = child.stdout.take() {
+        pipe.read_to_string(&mut raw_stdout)
+            .map_err(|e| format!("docker: failed to read output: {e}"))?;
+    }
+    let stdout = raw_stdout;
     let mut entries = Vec::new();
 
     // docker system df outputs JSONL (one JSON object per line)
@@ -212,10 +244,8 @@ fn get_cleanup_hint(type_: &str) -> String {
 /// These VM disk images can be 30-60 GB and don't automatically shrink when
 /// you delete containers/images inside the VM.
 fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
-    let platform = platform::detect();
-
     // only macOS and Windows use VM disk images for Docker Desktop
-    let (vm_path, cleanup_hint) = match platform {
+    let (vm_path, cleanup_hint) = match config.platform {
         platform::Platform::MacOS => {
             // UNTESTED: This path is based on Docker Desktop documentation
             let home = platform::home_dir()?;

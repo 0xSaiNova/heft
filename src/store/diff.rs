@@ -38,7 +38,7 @@ pub struct DiffResult {
 /// Create a unique key for matching entries across snapshots.
 /// Uses category + name since paths can change.
 fn make_key(entry: &BloatEntry) -> String {
-    format!("{:?}:{}", entry.category, entry.name)
+    format!("{}:{}", entry.category.as_str(), entry.name)
 }
 
 /// Compare two sets of entries and produce diff entries
@@ -68,7 +68,9 @@ pub fn compare_entries(
     for (key, to_entry) in &to_map {
         if let Some(from_entry) = from_map.get(key) {
             // entry exists in both snapshots
-            let delta = to_entry.size_bytes as i64 - from_entry.size_bytes as i64;
+            let to_size = i64::try_from(to_entry.size_bytes).unwrap_or(i64::MAX);
+            let from_size = i64::try_from(from_entry.size_bytes).unwrap_or(i64::MAX);
+            let delta = to_size.saturating_sub(from_size);
 
             if delta != 0 {
                 let diff_type = if delta > 0 {
@@ -86,11 +88,11 @@ pub fn compare_entries(
                     diff_type,
                 });
 
-                net_change += delta;
+                net_change = net_change.saturating_add(delta);
             }
         } else {
             // new entry (only in 'to' snapshot)
-            let delta = to_entry.size_bytes as i64;
+            let delta = i64::try_from(to_entry.size_bytes).unwrap_or(i64::MAX);
 
             diff_entries.push(DiffEntry {
                 name: to_entry.name.clone(),
@@ -101,14 +103,14 @@ pub fn compare_entries(
                 diff_type: DiffType::New,
             });
 
-            net_change += delta;
+            net_change = net_change.saturating_add(delta);
         }
     }
 
     // find gone entries (only in 'from' snapshot)
     for (key, from_entry) in &from_map {
         if !to_map.contains_key(key) {
-            let delta = -(from_entry.size_bytes as i64);
+            let delta = -i64::try_from(from_entry.size_bytes).unwrap_or(i64::MAX);
 
             diff_entries.push(DiffEntry {
                 name: from_entry.name.clone(),
@@ -119,7 +121,7 @@ pub fn compare_entries(
                 diff_type: DiffType::Gone,
             });
 
-            net_change += delta;
+            net_change = net_change.saturating_add(delta);
         }
     }
 

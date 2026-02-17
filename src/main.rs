@@ -1,25 +1,14 @@
 use clap::Parser;
-use heft::cli::{Cli, Command};
+use heft::cli::{Cli, Command, CleanCategory};
 use heft::config::Config;
 use heft::scan;
 use heft::report;
 use heft::clean;
-use heft::snapshot;
+use heft::store::snapshot::Store;
 use heft::util;
-use heft::store::diff::{DiffResult, DiffType};
 use heft::scan::detector::BloatCategory;
+use heft::store::diff::{DiffResult, DiffType};
 use std::collections::HashMap;
-
-fn category_label(cat: &BloatCategory) -> &'static str {
-    match cat {
-        BloatCategory::ProjectArtifacts => "Project Artifacts",
-        BloatCategory::ContainerData => "Container Data",
-        BloatCategory::PackageCache => "Package Cache",
-        BloatCategory::IdeData => "IDE Data",
-        BloatCategory::SystemCache => "System Cache",
-        BloatCategory::Other => "Other",
-    }
-}
 
 fn print_diff(result: &DiffResult) {
     let from_date = chrono::DateTime::from_timestamp(result.from_timestamp, 0)
@@ -48,12 +37,12 @@ fn print_diff(result: &DiffResult) {
 
     // sort categories for consistent output
     let mut categories: Vec<_> = by_category.keys().collect();
-    categories.sort_by_key(|c| category_label(c));
+    categories.sort_by_key(|c| c.label());
 
     for category in categories {
         let Some(entries) = by_category.get(category) else { continue };
 
-        println!("{}:", category_label(category));
+        println!("{}:", category.label());
 
         let mut grew: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Grew)).collect();
         let mut shrank: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Shrank)).collect();
@@ -116,17 +105,34 @@ fn main() {
             let config = Config::from_scan_args(&args);
             let result = scan::run(&config);
 
-            if let Err(e) = snapshot::save_snapshot(&result) {
-                if config.verbose {
-                    eprintln!("warning: failed to save snapshot: {e}");
+            match Store::open() {
+                Ok(mut store) => {
+                    if let Err(e) = store.save_snapshot(&result) {
+                        if config.verbose {
+                            eprintln!("warning: failed to save snapshot: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    if config.verbose {
+                        eprintln!("warning: failed to open snapshot store: {e}");
+                    }
                 }
             }
 
             report::print(&result, &config);
         }
         Command::Report(args) => {
+            let store = match Store::open() {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening snapshot store: {e}");
+                    std::process::exit(1);
+                }
+            };
+
             if args.list {
-                match snapshot::list_snapshots() {
+                match store.list_snapshots() {
                     Ok(snapshots) => {
                         if snapshots.is_empty() {
                             println!("No snapshots found. Run 'heft scan' to create one.");
@@ -158,15 +164,20 @@ fn main() {
                         eprintln!("Invalid snapshot ID: '{id_str}'. Must be a number.");
                         std::process::exit(1);
                     });
-                    snapshot::get_snapshot(id)
+                    store.get_snapshot(id)
                 } else {
-                    snapshot::get_latest_snapshot()
+                    store.get_latest_snapshot()
                 };
 
                 match snapshot_result {
                     Ok(Some(snapshot)) => {
-                        let entries = snapshot::load_snapshot_entries(snapshot.id)
-                            .unwrap_or_default();
+                        let entries = match store.load_snapshot_entries(snapshot.id) {
+                            Ok(e) => e,
+                            Err(e) => {
+                                eprintln!("Error loading snapshot entries: {e}");
+                                std::process::exit(1);
+                            }
+                        };
 
                         let scan_result = scan::ScanResult {
                             entries,
@@ -205,18 +216,29 @@ fn main() {
             }
         }
         Command::Clean(args) => {
-            let config = Config::default();
+            let config = Config::from_clean_args(&args);
             let scan_result = scan::run(&config);
 
-            let mode = if args.yes {
-                clean::CleanMode::Execute
-            } else if args.dry_run {
+            let mode = if args.dry_run {
                 clean::CleanMode::DryRun
+            } else if args.yes {
+                clean::CleanMode::Execute
             } else {
                 clean::CleanMode::Interactive
             };
 
-            let clean_result = clean::run(&scan_result, mode, args.category.clone());
+            let category_filter = args.category.map(|cats| {
+                cats.into_iter().map(|c| match c {
+                    CleanCategory::ProjectArtifacts => heft::scan::detector::BloatCategory::ProjectArtifacts,
+                    CleanCategory::ContainerData => heft::scan::detector::BloatCategory::ContainerData,
+                    CleanCategory::PackageCache => heft::scan::detector::BloatCategory::PackageCache,
+                    CleanCategory::IdeData => heft::scan::detector::BloatCategory::IdeData,
+                    CleanCategory::SystemCache => heft::scan::detector::BloatCategory::SystemCache,
+                    CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                }).collect()
+            });
+
+            let clean_result = clean::run(&scan_result, mode, category_filter);
 
             if !matches!(mode, clean::CleanMode::Interactive) {
                 for item in &clean_result.deleted {
@@ -246,6 +268,14 @@ fn main() {
         Command::Diff(args) => {
             use heft::store::diff;
 
+            let store = match Store::open() {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error opening snapshot store: {e}");
+                    std::process::exit(1);
+                }
+            };
+
             // validate that --from and --to are used together
             if args.from.is_some() != args.to.is_some() {
                 eprintln!("Both --from and --to must be specified together.");
@@ -263,7 +293,7 @@ fn main() {
                 });
                 (from, to)
             } else {
-                match snapshot::list_snapshots() {
+                match store.list_snapshots() {
                     Ok(snapshots) => {
                         if snapshots.len() < 2 {
                             eprintln!("Need at least 2 snapshots to compare. Run 'heft scan' a few times.");
@@ -278,7 +308,7 @@ fn main() {
                 }
             };
 
-            let from_snapshot = match snapshot::get_snapshot(from_id) {
+            let from_snapshot = match store.get_snapshot(from_id) {
                 Ok(Some(s)) => s,
                 Ok(None) => {
                     eprintln!("Snapshot {from_id} not found");
@@ -290,7 +320,7 @@ fn main() {
                 }
             };
 
-            let to_snapshot = match snapshot::get_snapshot(to_id) {
+            let to_snapshot = match store.get_snapshot(to_id) {
                 Ok(Some(s)) => s,
                 Ok(None) => {
                     eprintln!("Snapshot {to_id} not found");
@@ -302,7 +332,7 @@ fn main() {
                 }
             };
 
-            let from_entries = match snapshot::load_snapshot_entries(from_id) {
+            let from_entries = match store.load_snapshot_entries(from_id) {
                 Ok(entries) => entries,
                 Err(e) => {
                     eprintln!("Error loading entries for snapshot {from_id}: {e}");
@@ -310,7 +340,7 @@ fn main() {
                 }
             };
 
-            let to_entries = match snapshot::load_snapshot_entries(to_id) {
+            let to_entries = match store.load_snapshot_entries(to_id) {
                 Ok(entries) => entries,
                 Err(e) => {
                     eprintln!("Error loading entries for snapshot {to_id}: {e}");

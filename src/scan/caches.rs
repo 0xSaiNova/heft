@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use walkdir::WalkDir;
-
 use crate::config::Config;
 use crate::platform::{self, Platform};
 use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
@@ -44,7 +42,7 @@ impl Detector for CacheDetector {
                 continue;
             }
 
-            match calculate_dir_size(&cache.path) {
+            match super::calculate_dir_size(&cache.path) {
                 Ok((size, warnings)) if size > 0 => {
                     entries.push(BloatEntry {
                         category: cache.category,
@@ -104,9 +102,14 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     });
 
     // pnpm store
+    let pnpm_path = match platform {
+        Platform::MacOS => home.join("Library/pnpm/store"),
+        Platform::Windows => home.join("AppData").join("Local").join("pnpm").join("store"),
+        Platform::Linux | Platform::Unknown => home.join(".local/share/pnpm/store"),
+    };
     locations.push(CacheLocation {
         name: "pnpm store",
-        path: home.join(".local/share/pnpm/store"),
+        path: pnpm_path,
         category: BloatCategory::PackageCache,
         cleanup_hint: "pnpm store prune",
     });
@@ -114,7 +117,8 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // pip cache
     let pip_path = match platform {
         Platform::MacOS => home.join("Library/Caches/pip"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".cache/pip"),
+        Platform::Windows => home.join("AppData").join("Local").join("pip").join("Cache"),
+        Platform::Linux | Platform::Unknown => home.join(".cache/pip"),
     };
     locations.push(CacheLocation {
         name: "pip cache",
@@ -166,7 +170,8 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // VS Code extensions and cache
     let vscode_path = match platform {
         Platform::MacOS => home.join("Library/Application Support/Code"),
-        Platform::Linux | Platform::Windows | Platform::Unknown => home.join(".config/Code"),
+        Platform::Windows => home.join("AppData").join("Roaming").join("Code"),
+        Platform::Linux | Platform::Unknown => home.join(".config/Code"),
     };
     locations.push(CacheLocation {
         name: "vscode data",
@@ -262,52 +267,3 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
     }
 }
 
-fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std::io::Error> {
-    let mut total = 0u64;
-    let mut warnings = Vec::new();
-    let mut overflowed = false;
-
-    for entry in WalkDir::new(path).follow_links(false).into_iter() {
-        match entry {
-            Ok(entry) => {
-                if entry.file_type().is_file() {
-                    match entry.metadata() {
-                        Ok(metadata) => {
-                            let file_size = metadata.len();
-                            match total.checked_add(file_size) {
-                                Some(new_total) => total = new_total,
-                                None => {
-                                    if !overflowed {
-                                        warnings.push("directory size exceeds u64::MAX, size capped at maximum value".to_string());
-                                        overflowed = true;
-                                    }
-                                    total = u64::MAX;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warnings.push(format!("failed to read metadata for {}: {}",
-                                entry.path().display(), e));
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                let path_str = e.path()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "unknown path".to_string());
-
-                if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
-                    warnings.push(format!("permission denied: {path_str}"));
-                } else if e.loop_ancestor().is_some() {
-                    warnings.push(format!("symlink loop detected: {path_str}"));
-                } else {
-                    // other errors: I/O errors, invalid UTF-8, filesystem issues
-                    warnings.push(format!("failed to traverse {path_str}: {e}"));
-                }
-            }
-        }
-    }
-
-    Ok((total, warnings))
-}

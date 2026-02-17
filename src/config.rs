@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::cli::ScanArgs;
+use crate::cli::{ScanArgs, CleanArgs};
 use crate::platform::{self, Platform};
 
 pub struct Config {
@@ -35,7 +35,30 @@ impl Config {
         }
     }
 
-    pub fn default() -> Self {
+    pub fn from_clean_args(args: &CleanArgs) -> Self {
+        let platform = platform::detect();
+
+        let roots = args.roots.clone().unwrap_or_else(|| {
+            platform::home_dir()
+                .map(|h| vec![h])
+                .unwrap_or_default()
+        });
+
+        Config {
+            roots,
+            timeout: Duration::from_secs(args.timeout),
+            skip_docker: args.no_docker,
+            json_output: false,
+            verbose: args.verbose,
+            progressive: false,
+            platform,
+        }
+    }
+
+}
+
+impl Default for Config {
+    fn default() -> Self {
         let platform = platform::detect();
         let roots = platform::home_dir()
             .map(|h| vec![h])
