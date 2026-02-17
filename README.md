@@ -1,23 +1,21 @@
 # heft
 
-**Your disk is full. Again.**
+**you probably have 20+ GB of garbage on your machine right now.**
 
-heft scans your home directory, finds every build artifact, package cache, and docker object eating your space, and lets you clean it up safely. takes about 3 seconds.
-
-## install
+build artifacts, docker layers, package caches, old node_modules from projects you haven't touched in a year. heft finds all of it in ~3 seconds and lets you clean it up without guessing.
 
 ```bash
 git clone https://github.com/0xSaiNova/heft.git
-cd heft && cargo build --release
-cp target/release/heft ~/.local/bin/
+cd heft && cargo build --release && cp target/release/heft ~/.local/bin/
 ```
 
-## scan
+---
 
-```bash
+## run it
+
+```
 $ heft scan
-```
-```
+
 Category            Name                          Size       Reclaimable  Age
 ─────────────────────────────────────────────────────────────────────────────────
 Project Artifacts   node_modules (old-project)     2.1 GB     2.1 GB      120d
@@ -28,20 +26,18 @@ Package Cache       npm cache                      3.2 GB     3.2 GB
                     cargo registry                 1.8 GB     1.8 GB
                     pip cache                      640 MB     640 MB
 
-Container Data      Docker Images                  7.3 GB     4.1 GB
-                    Docker Build Cache             2.8 GB     2.8 GB
-                    Docker Volumes                 1.2 GB     900 MB
+Container Data      docker images                  7.3 GB     4.1 GB
+                    docker build cache             2.8 GB     2.8 GB
 
-Total: 20.3 GB found, 16.8 GB reclaimable across 9 items
+Total: 20.3 GB found, 16.8 GB reclaimable
 Scan completed in 3.12s (peak memory: 27.4 MB)
 ```
 
-## clean
+## clean it up
 
-```bash
+```
 $ heft clean
-```
-```
+
 Project Artifacts: 3.3 GB (3 items)
   Delete? [y/n]: y
 
@@ -54,30 +50,21 @@ Container Data: 7.8 GB (3 items)
 Freed 11.1 GB
 ```
 
-you pick what goes. `--dry-run` to preview, `--yes` to skip prompts, `--category container-data` to target specific stuff.
-
-## track changes over time
-
-every scan auto-saves to a local sqlite database. no config needed.
+interactive by default — you approve each category before anything gets deleted. no surprises.
 
 ```bash
-$ heft report --list
-```
-```
-ID     Date                 Total        Reclaimable
-────────────────────────────────────────────────────
-5      2026-02-15 09:15     14.2 GB      11.3 GB
-4      2026-02-12 18:30     18.7 GB      15.1 GB
-3      2026-02-10 14:00     20.3 GB      16.8 GB
+heft clean --dry-run                        # see exactly what would go
+heft clean --yes                            # skip prompts, delete everything
+heft clean --category project-artifacts     # only clean one category
+heft clean --roots ~/code --no-docker       # control what gets scanned first
 ```
 
-```bash
+## watch your disk over time
+
+every scan saves automatically. no setup.
+
+```
 $ heft diff
-```
-```
-Comparing snapshots:
-  From: #4 (2026-02-12 18:30:00)
-  To:   #5 (2026-02-15 09:15:00)
 
 Package Cache:
   [+] npm cache grew 1.2 GB -> 1.8 GB (+600 MB)
@@ -90,40 +77,33 @@ Project Artifacts:
 Net change: 540 MB freed
 ```
 
-`heft diff --from 1 --to 5` to compare any two snapshots.
+```bash
+heft report --list          # see all saved snapshots
+heft report --id 3          # replay any past scan
+heft diff --from 1 --to 5   # compare any two
+```
 
-## what it detects
+## what it finds
 
-| Category | What it finds |
-|----------|---------------|
-| Project artifacts | `node_modules/`, `target/`, `.venv/`, gradle/maven builds, DerivedData |
-| Package caches | npm, yarn, pnpm, cargo, pip, homebrew, go, maven, gradle |
-| Docker | images, containers, volumes, build cache, Desktop VM files |
-| IDE data | VSCode extensions and caches, language servers |
+| | |
+|---|---|
+| **project artifacts** | `node_modules`, `target`, `.venv`, gradle/maven builds, Xcode DerivedData |
+| **package caches** | npm, yarn, pnpm, pip, cargo, homebrew, go modules, maven, gradle |
+| **docker** | images, containers, volumes, build cache, Desktop VM disk files |
+| **IDE data** | VSCode extensions and caches |
 
 ## scripting
 
 ```bash
-heft scan --json | jq '.entries[] | select(.size_bytes > 1000000000)'
-heft scan --verbose              # per-detector timing and diagnostics
-heft scan --progressive          # results as each detector finishes
-heft scan --roots ~/code,~/work  # scan specific directories
+heft scan --json | jq '.entries[] | select(.size_bytes > 1073741824)'
+heft scan --progressive    # stream results as each detector finishes
+heft scan --verbose        # show per-detector timing and diagnostics
 ```
 
 ## safety
 
-- never touches source code or project files
-- validates paths before deletion (absolute, under home/temp only)
-- refuses to follow symlinks
-- interactive mode by default
+never touches source files. validates every path before deletion (must be absolute, under home). refuses to follow symlinks. interactive by default.
 
-## performance
+---
 
-- ~3 second full home directory scan
-- ~27 MB peak memory
-- ~58ms on synthetic benchmarks (criterion)
-- single binary, no runtime dependencies
-
-## license
-
-MIT
+MIT license

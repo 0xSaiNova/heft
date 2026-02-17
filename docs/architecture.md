@@ -23,8 +23,9 @@ src/
   clean/
     mod.rs         cleanup engine
   store/
-    mod.rs         sqlite persistence
-    diff.rs        snapshot comparison
+    mod.rs         module declarations
+    snapshot.rs    sqlite persistence (Store struct)
+    diff.rs        snapshot comparison engine
 ```
 
 ## Core Types
@@ -38,8 +39,13 @@ The `Detector` trait is the central abstraction. Each detector implements:
 
 ## Data Flow
 
-1. CLI parses args into `ScanArgs`
+1. CLI parses args into `ScanArgs` or `CleanArgs`
 2. `Config` constructed from args and platform detection
 3. Orchestrator runs each available detector
 4. Results merged into `ScanResult`
 5. Reporter formats output for terminal or JSON
+6. `Store::open()` opens a single SQLite connection and saves the snapshot
+
+## Snapshot Storage
+
+`Store` in `store/snapshot.rs` owns one SQLite connection for the lifetime of a command. All snapshot operations go through it - no function opens its own connection. Foreign keys are enforced via `PRAGMA foreign_keys = ON` on open, and entries cascade delete when their parent snapshot is removed.
