@@ -229,19 +229,27 @@ fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
         }
     });
 
-    // check for xcode project file in parent directories
-    let has_xcode_project = parent.ancestors().any(|ancestor| {
-        if let Ok(entries) = std::fs::read_dir(ancestor) {
-            entries.flatten().any(|e| {
-                e.path().extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|s| s == "xcodeproj" || s == "xcworkspace")
-                    .unwrap_or(false)
-            })
-        } else {
-            false
-        }
-    });
+    // check for xcode project file in parent directories.
+    // bounded to home directory and capped at 10 levels to avoid walking
+    // all the way up to / and calling read_dir on every ancestor.
+    let home = crate::platform::home_dir();
+    let has_xcode_project = parent.ancestors()
+        .take_while(|ancestor| {
+            home.as_deref().map(|h| *ancestor != h).unwrap_or(true)
+        })
+        .take(10)
+        .any(|ancestor| {
+            if let Ok(entries) = std::fs::read_dir(ancestor) {
+                entries.flatten().any(|e| {
+                    e.path().extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|s| s == "xcodeproj" || s == "xcworkspace")
+                        .unwrap_or(false)
+                })
+            } else {
+                false
+            }
+        });
 
     // check for xcode-specific subdirectories in DerivedData
     let has_xcode_markers = path.join("Build").exists()
@@ -343,23 +351,26 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
     let mut latest: Option<SystemTime> = None;
     let source_extensions = ["rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift"];
 
-    // only check top few levels, dont need to go deep
+    // only check top few levels, dont need to go deep.
+    // filter_entry prunes descent into artifact directories entirely, not just
+    // skips their entry. using continue here would skip the entry but still
+    // let walkdir descend into it (scanning thousands of files for nothing).
     for entry in WalkDir::new(project_root)
         .max_depth(3)
         .follow_links(false)
         .into_iter()
+        .filter_entry(|e| {
+            if !e.file_type().is_dir() {
+                return true;
+            }
+            e.file_name().to_str()
+                .map(|s| !matches!(s, "node_modules" | "target" | ".venv" | "venv" | "vendor" | "__pycache__" | "build" | "dist"))
+                .unwrap_or(true)
+        })
         .filter_map(|e| e.ok())
     {
-        let path = entry.path();
-
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if matches!(name, "node_modules" | "target" | ".venv" | "venv" | "vendor" | "__pycache__" | "build" | "dist") {
-                continue;
-            }
-        }
-
         if entry.file_type().is_file() {
-            let is_source = path.extension()
+            let is_source = entry.path().extension()
                 .and_then(|e| e.to_str())
                 .map(|ext| source_extensions.contains(&ext))
                 .unwrap_or(false);
