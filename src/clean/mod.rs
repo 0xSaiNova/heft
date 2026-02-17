@@ -31,19 +31,12 @@ pub struct CleanResult {
     pub bytes_freed: u64,
 }
 
-pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>) -> CleanResult {
+pub fn run(result: &ScanResult, mode: CleanMode, category_filter: Option<Vec<BloatCategory>>) -> CleanResult {
     let mut clean_result = CleanResult {
         deleted: Vec::new(),
         errors: Vec::new(),
         bytes_freed: 0,
     };
-
-    // convert category filter strings to enums once for efficiency
-    let category_filter: Option<Vec<BloatCategory>> = categories.map(|strings| {
-        strings.iter()
-            .filter_map(|s| string_to_category(s.as_str()))
-            .collect()
-    });
 
     // filter entries by category if specified, using iterator to avoid allocation
     let entries = result.entries.iter().filter(|entry| {
@@ -54,8 +47,8 @@ pub fn run(result: &ScanResult, mode: CleanMode, categories: Option<Vec<String>>
             }
         }
 
-        if let Some(ref cats) = category_filter {
-            cats.contains(&entry.category)
+        if let Some(ref filter) = category_filter {
+            filter.contains(&entry.category)
         } else {
             true
         }
@@ -270,10 +263,10 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
 }
 
 fn delete_docker_object(obj_id: &str) -> Result<String, String> {
-    // use docker rmi for image removal which is most common case
     let output = Command::new("docker")
         .arg("rmi")
         .arg("-f")
+        .arg("--")
         .arg(obj_id)
         .output();
 
@@ -324,17 +317,6 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
     }
 }
 
-fn string_to_category(s: &str) -> Option<BloatCategory> {
-    match s {
-        "project-artifacts" => Some(BloatCategory::ProjectArtifacts),
-        "container-data" => Some(BloatCategory::ContainerData),
-        "package-cache" => Some(BloatCategory::PackageCache),
-        "ide-data" => Some(BloatCategory::IdeData),
-        "system-cache" => Some(BloatCategory::SystemCache),
-        "other" => Some(BloatCategory::Other),
-        _ => None,
-    }
-}
 
 fn location_display(location: &Location) -> String {
     match location {

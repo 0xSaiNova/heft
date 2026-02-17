@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -67,19 +67,51 @@ pub struct ReportArgs {
     pub json: bool,
 }
 
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum CleanCategory {
+    #[value(name = "project-artifacts")]
+    ProjectArtifacts,
+    #[value(name = "container-data")]
+    ContainerData,
+    #[value(name = "package-cache")]
+    PackageCache,
+    #[value(name = "ide-data")]
+    IdeData,
+    #[value(name = "system-cache")]
+    SystemCache,
+    #[value(name = "other")]
+    Other,
+}
+
 #[derive(Parser)]
 pub struct CleanArgs {
-    /// Skip confirmation and execute deletion
-    #[arg(long, default_value_t = false)]
+    /// Skip confirmation and execute deletion (conflicts with --dry-run)
+    #[arg(long, default_value_t = false, conflicts_with = "dry_run")]
     pub yes: bool,
 
-    /// Show what would be deleted without prompting
+    /// Show what would be deleted without making any changes
     #[arg(long, default_value_t = false)]
     pub dry_run: bool,
 
     /// Only clean specific categories
     #[arg(long, value_delimiter = ',')]
-    pub category: Option<Vec<String>>,
+    pub category: Option<Vec<CleanCategory>>,
+
+    /// Directories to scan (defaults to home directory)
+    #[arg(long, value_delimiter = ',')]
+    pub roots: Option<Vec<PathBuf>>,
+
+    /// Skip the Docker detector
+    #[arg(long, default_value_t = false)]
+    pub no_docker: bool,
+
+    /// Per-detector timeout in seconds
+    #[arg(long, default_value_t = 30)]
+    pub timeout: u64,
+
+    /// Show detailed output including diagnostics
+    #[arg(long, short = 'v', default_value_t = false)]
+    pub verbose: bool,
 }
 
 #[derive(Parser)]

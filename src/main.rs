@@ -1,5 +1,5 @@
 use clap::Parser;
-use heft::cli::{Cli, Command};
+use heft::cli::{Cli, Command, CleanCategory};
 use heft::config::Config;
 use heft::scan;
 use heft::report;
@@ -194,18 +194,29 @@ fn main() {
             }
         }
         Command::Clean(args) => {
-            let config = Config::default();
+            let config = Config::from_clean_args(&args);
             let scan_result = scan::run(&config);
 
-            let mode = if args.yes {
-                clean::CleanMode::Execute
-            } else if args.dry_run {
+            let mode = if args.dry_run {
                 clean::CleanMode::DryRun
+            } else if args.yes {
+                clean::CleanMode::Execute
             } else {
                 clean::CleanMode::Interactive
             };
 
-            let clean_result = clean::run(&scan_result, mode, args.category.clone());
+            let category_filter = args.category.map(|cats| {
+                cats.into_iter().map(|c| match c {
+                    CleanCategory::ProjectArtifacts => heft::scan::detector::BloatCategory::ProjectArtifacts,
+                    CleanCategory::ContainerData => heft::scan::detector::BloatCategory::ContainerData,
+                    CleanCategory::PackageCache => heft::scan::detector::BloatCategory::PackageCache,
+                    CleanCategory::IdeData => heft::scan::detector::BloatCategory::IdeData,
+                    CleanCategory::SystemCache => heft::scan::detector::BloatCategory::SystemCache,
+                    CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                }).collect()
+            });
+
+            let clean_result = clean::run(&scan_result, mode, category_filter);
 
             if !matches!(mode, clean::CleanMode::Interactive) {
                 for item in &clean_result.deleted {
