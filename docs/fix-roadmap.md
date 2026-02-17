@@ -36,6 +36,14 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #6 - sqlite snapshot storage (commits 8072a16, 0ca24f9)
 - ✅ #7 - diff engine (full implementation with testing)
 
+**Post-v0.4 bug fixes: COMPLETE ✅**
+- ✅ #78 - integer overflow in diff engine delta calculations
+- ✅ #79 - wrong cache and IDE paths on Windows/macOS
+- ✅ #80 - docker detector blocking + redundant spawn
+- ✅ #81 - clean command safety (--yes/--dry-run conflict, scan config ignored, silent category typos, docker rmi flag injection)
+- ✅ #82 - snapshot connection reuse, FK enforcement, silent error swallowing, module placement
+- ✅ #83 - walkdir descent not pruned, unbounded xcode ancestor walk
+
 ---
 
 ## phase 1: get the basics solid ✅ COMPLETE
@@ -157,7 +165,7 @@ automated performance tests to catch regressions. needs [#39](https://github.com
 ### [#6](https://github.com/0xSaiNova/heft/issues/6) - sqlite snapshot storage ✅ COMPLETE
 save scan results to a database so we can compare over time. this is the killer feature that makes heft different from other tools. vision doc v0.4 milestone.
 
-**status: COMPLETE - implemented in commits 8072a16 and 0ca24f9. snapshots auto-save after every scan to ~/.local/share/heft/heft.db. `heft report --list` shows all snapshots. `heft report --id N` displays a specific snapshot. uses rusqlite with bundled sqlite. transaction-based saves with single-pass totals calculation for performance. schema includes snapshots table (metadata) and entries table (individual bloat items). changes in src/snapshot.rs and src/store/mod.rs.**
+**status: COMPLETE - implemented in commits 8072a16 and 0ca24f9. snapshots auto-save after every scan to ~/.local/share/heft/heft.db. `heft report --list` shows all snapshots. `heft report --id N` displays a specific snapshot. uses rusqlite with bundled sqlite. transaction-based saves with single-pass totals calculation for performance. schema includes snapshots table (metadata) and entries table (individual bloat items). later refactored in #82 to use a Store struct with connection reuse - code now lives in src/store/snapshot.rs.**
 
 ### [#7](https://github.com/0xSaiNova/heft/issues/7) - diff engine ✅ COMPLETE
 compare two snapshots to see what grew or shrank. depends on [#6](https://github.com/0xSaiNova/heft/issues/6) obviously. completes the "track changes over time" story.

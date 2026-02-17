@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Integer overflow in diff engine delta calculations - `size_bytes as i64` silently truncated large values, negating the result could panic in debug mode on i64::MIN. Now uses `i64::try_from` with saturating arithmetic throughout (#78)
+- `make_key` in diff engine used `{:?}` debug format for snapshot lookup keys - any variant rename would silently break old snapshot matching. Now uses `as_str()` which is the stable DB representation (#78)
+- `total_bytes` fold in `save_snapshot` used wrapping addition, now uses `saturating_add` (#78)
+- pip cache path on Windows was using Linux path `~/.cache/pip`, corrected to `AppData/Local/pip/Cache` (#79)
+- VSCode data path on Windows was using Linux path `~/.config/Code`, corrected to `AppData/Roaming/Code` (#79)
+- pnpm store path was hardcoded to Linux path for all platforms, now platform-aware (macOS: `Library/pnpm/store`, Windows: `AppData/Local/pnpm/store`) (#79)
+- Docker detector used `.output()` which blocks indefinitely if Docker Desktop is starting. Now uses spawn+poll with `config.timeout` (#80)
+- Docker `available()` check spawned `docker --version` redundantly since `scan()` already handles not-installed gracefully. Removed the extra spawn (#80)
+- `detect_docker_desktop_vm` called `platform::detect()` directly instead of using `config.platform`, making platform untestable (#80)
+- `heft clean --yes --dry-run` silently executed deletion instead of erroring. Now rejected at parse time with `conflicts_with` (#81)
+- `heft clean` ignored all scan configuration - `--roots`, `--timeout`, `--no-docker` had no effect. Clean now accepts and uses these flags (#81)
+- `--category` on clean silently dropped unrecognized values, producing an empty filter with no feedback. Now uses `ValueEnum` so invalid values are rejected at parse time (#81)
+- `docker rmi` in `delete_docker_object` was missing `--` before the object ID, allowing crafted IDs to be interpreted as flags (#81)
+- Snapshot functions each opened their own SQLite connection. The diff command opened 4 connections for a single user action. Replaced with a `Store` struct that holds one connection per command (#82)
+- SQLite foreign keys were declared but never enforced (`PRAGMA foreign_keys = ON` was missing). Entries now also cascade delete when their parent snapshot is deleted (#82)
+- `load_snapshot_entries` failures in the report command were swallowed with `unwrap_or_default()`, silently showing an empty table on a corrupted database (#82)
+- `snapshot.rs` lived outside the `store/` module it belongs to. Moved to `store/snapshot.rs` (#82)
+- `get_source_last_modified` used `continue` to skip artifact directories but walkdir still descended into them, scanning thousands of files unnecessarily. Now uses `filter_entry` to prune traversal entirely (#83)
+- `is_xcode_derived_data` walked all ancestors up to `/` calling `read_dir` on each. Now bounded to home directory with a hard cap of 10 levels (#83)
+
 ## [0.4.0] - 2026-02-15
 
 ### Added
