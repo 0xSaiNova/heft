@@ -79,7 +79,7 @@ pub fn save_snapshot(result: &ScanResult) -> Result<i64, Box<dyn std::error::Err
     // Calculate totals in single pass (optimization: avoid double iteration)
     let (total_bytes, reclaimable_bytes) = result.entries.iter()
         .fold((0u64, 0u64), |(total, reclaimable), entry| {
-            (total + entry.size_bytes, reclaimable + entry.reclaimable_bytes)
+            (total.saturating_add(entry.size_bytes), reclaimable.saturating_add(entry.reclaimable_bytes))
         });
 
     let timestamp = std::time::SystemTime::now()
