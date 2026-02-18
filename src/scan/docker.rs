@@ -236,28 +236,30 @@ fn get_cleanup_hint(type_: &str) -> String {
 
 /// Detect Docker Desktop VM disk image on macOS and Windows.
 ///
-/// NOTE: macOS and Windows detection paths are UNTESTED on actual hardware.
-/// Paths are based on Docker Desktop documentation. If you're running this on
-/// macOS or Windows and encounter issues, please report at:
-/// https://github.com/0xSaiNova/heft/issues/42
-///
 /// These VM disk images can be 30-60 GB and don't automatically shrink when
-/// you delete containers/images inside the VM.
+/// you delete containers or images inside the VM. `docker system prune` frees
+/// space inside the VM but the host file doesn't compact unless you take
+/// explicit action.
+///
+/// NOTE: Windows path is based on Docker Desktop WSL2 documentation and has
+/// not been tested on real hardware. Report issues at:
+/// https://github.com/0xSaiNova/heft/issues/42
 fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
     // only macOS and Windows use VM disk images for Docker Desktop
     let (vm_path, cleanup_hint) = match config.platform {
         platform::Platform::MacOS => {
-            // UNTESTED: This path is based on Docker Desktop documentation
             let home = platform::home_dir()?;
             let path = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
-            let hint = "Docker Desktop VM disk. To reclaim space: Docker Desktop → Settings → Resources → Disk image size → 'Clean/Purge data'. Or run 'docker system prune' and restart Docker Desktop.".to_string();
+            // docker system prune frees space inside the VM but Docker.raw won't
+            // shrink on disk — you need to purge via Docker Desktop settings
+            let hint = "Docker Desktop VM disk (doesn't auto-compact). Shrink it: Docker Desktop → Settings → Resources → Advanced → Disk image size → 'Clean/Purge data'. Then restart Docker Desktop.".to_string();
             (path, hint)
         }
         platform::Platform::Windows => {
-            // UNTESTED: This path is based on Docker Desktop WSL2 documentation
+            // NOTE: UNTESTED on real Windows hardware
             let home = platform::home_dir()?;
             let path = home.join("AppData/Local/Docker/wsl/data/ext4.vhdx");
-            let hint = "Docker Desktop VM disk. To reclaim space: run 'wsl --shutdown' then 'Optimize-VHD -Path $path -Mode Full' in PowerShell (admin).".to_string();
+            let hint = "Docker Desktop VM disk (doesn't auto-compact). Shrink it: run 'wsl --shutdown' then 'Optimize-VHD -Path <path> -Mode Full' in PowerShell (admin).".to_string();
             (path, hint)
         }
         _ => return None, // Linux doesn't use VM disk images
@@ -291,7 +293,7 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
 
     Some(BloatEntry {
         category: BloatCategory::ContainerData,
-        name: format!("Docker Desktop VM ({})", vm_path.display()),
+        name: "Docker Desktop VM disk".to_string(),
         location: Location::FilesystemPath(vm_path),
         size_bytes,
         reclaimable_bytes: 0, // we can't determine reclaimable size without analyzing the VM
