@@ -5,9 +5,9 @@
 //! Can grow to 10-30 GB on active iOS/macOS projects and is fully safe
 //! to delete — Xcode rebuilds it on next build.
 
+use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 use crate::config::Config;
 use crate::platform::{self, Platform};
-use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 
 pub struct XcodeDetector;
 
@@ -23,7 +23,11 @@ impl Detector for XcodeDetector {
     fn scan(&self, config: &Config) -> DetectorResult {
         let home = match platform::home_dir() {
             Some(h) => h,
-            None => return DetectorResult::with_diagnostic("xcode: could not determine home directory".into()),
+            None => {
+                return DetectorResult::with_diagnostic(
+                    "xcode: could not determine home directory".into(),
+                )
+            }
         };
 
         let derived_data = home.join("Library/Developer/Xcode/DerivedData");
@@ -34,7 +38,8 @@ impl Detector for XcodeDetector {
 
         match super::calculate_dir_size(&derived_data) {
             Ok((size, warnings)) if size > 0 => {
-                let mut diagnostics: Vec<String> = warnings.into_iter()
+                let mut diagnostics: Vec<String> = warnings
+                    .into_iter()
                     .map(|w| format!("{w} (size may be underestimated)"))
                     .collect();
 
@@ -58,9 +63,9 @@ impl Detector for XcodeDetector {
                 }
             }
             Ok(_) => DetectorResult::empty(),
-            Err(e) => DetectorResult::with_diagnostic(
-                format!("xcode: failed to calculate DerivedData size: {e}")
-            ),
+            Err(e) => DetectorResult::with_diagnostic(format!(
+                "xcode: failed to calculate DerivedData size: {e}"
+            )),
         }
     }
 }

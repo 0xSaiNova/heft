@@ -17,15 +17,15 @@
 //!
 //! Does not walk Docker's internal storage directories directly.
 
+use serde::Deserialize;
+use std::fs;
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use std::fs;
-use serde::Deserialize;
 
+use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 use crate::config::Config;
 use crate::platform;
-use super::detector::{Detector, DetectorResult, BloatEntry, BloatCategory, Location};
 
 pub struct DockerDetector;
 
@@ -114,12 +114,15 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
 
         // check for common error patterns
         if stderr.contains("Cannot connect to the Docker daemon")
-            || stderr.contains("Is the docker daemon running") {
+            || stderr.contains("Is the docker daemon running")
+        {
             return Err("docker: daemon not running (start Docker Desktop or dockerd)".to_string());
         }
 
         if stderr.contains("permission denied") || stderr.contains("EACCES") {
-            return Err("docker: permission denied (add user to docker group or run with sudo)".to_string());
+            return Err(
+                "docker: permission denied (add user to docker group or run with sudo)".to_string(),
+            );
         }
 
         return Err(format!("docker: command failed: {}", stderr.trim()));
@@ -205,7 +208,8 @@ fn parse_docker_size(size_str: &str) -> Result<u64, String> {
     let num_str = &size_part[..num_end];
     let unit = size_part[num_end..].trim();
 
-    let num: f64 = num_str.parse()
+    let num: f64 = num_str
+        .parse()
         .map_err(|_| format!("docker: invalid number in size: {size_str}"))?;
 
     let multiplier: u64 = match unit {
@@ -297,7 +301,7 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
         location: Location::FilesystemPath(vm_path),
         size_bytes,
         reclaimable_bytes: 0, // we can't determine reclaimable size without analyzing the VM
-        last_modified: None, // timestamp not needed for VM disk
+        last_modified: None,  // timestamp not needed for VM disk
         cleanup_hint: Some(cleanup_hint),
     })
 }

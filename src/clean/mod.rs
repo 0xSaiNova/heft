@@ -15,7 +15,10 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::platform;
-use crate::scan::{ScanResult, detector::{BloatEntry, BloatCategory, Location}};
+use crate::scan::{
+    detector::{BloatCategory, BloatEntry, Location},
+    ScanResult,
+};
 use crate::util;
 
 #[derive(Copy, Clone, PartialEq)]
@@ -31,7 +34,11 @@ pub struct CleanResult {
     pub bytes_freed: u64,
 }
 
-pub fn run(result: &ScanResult, mode: CleanMode, category_filter: Option<Vec<BloatCategory>>) -> CleanResult {
+pub fn run(
+    result: &ScanResult,
+    mode: CleanMode,
+    category_filter: Option<Vec<BloatCategory>>,
+) -> CleanResult {
     let mut clean_result = CleanResult {
         deleted: Vec::new(),
         errors: Vec::new(),
@@ -59,7 +66,9 @@ pub fn run(result: &ScanResult, mode: CleanMode, category_filter: Option<Vec<Blo
         CleanMode::DryRun => {
             for entry in entries {
                 let location_str = location_display(&entry.location);
-                clean_result.deleted.push(format!("[dry-run] would delete: {location_str}"));
+                clean_result
+                    .deleted
+                    .push(format!("[dry-run] would delete: {location_str}"));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
             }
         }
@@ -82,8 +91,11 @@ pub fn run(result: &ScanResult, mode: CleanMode, category_filter: Option<Vec<Blo
             // calculate totals
             let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
 
-            println!("\nFound {} reclaimable across {} categories:\n",
-                util::format_bytes(total_bytes), by_category.len());
+            println!(
+                "\nFound {} reclaimable across {} categories:\n",
+                util::format_bytes(total_bytes),
+                by_category.len()
+            );
 
             // sort categories for consistent display order
             let mut categories: Vec<_> = by_category.iter().collect();
@@ -94,10 +106,12 @@ pub fn run(result: &ScanResult, mode: CleanMode, category_filter: Option<Vec<Blo
                 let cat_bytes: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
                 let cat_items = entries.len();
 
-                println!("{}: {} ({} items)",
+                println!(
+                    "{}: {} ({} items)",
                     category.as_str(),
                     util::format_bytes(cat_bytes),
-                    cat_items);
+                    cat_items
+                );
 
                 print!("  Delete? [y/n]: ");
                 use std::io::{self, Write};
@@ -175,9 +189,8 @@ fn delete_filesystem_path(path: &Path) -> Result<String, String> {
     // security: use symlink_metadata to avoid following symlinks (issue #55)
     // this also mitigates TOCTOU attacks where a directory could be replaced
     // with a symlink between scan and clean operations (issue #56)
-    let metadata = fs::symlink_metadata(path).map_err(|e| {
-        format!("failed to get metadata for {}: {}", path.display(), e)
-    })?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|e| format!("failed to get metadata for {}: {}", path.display(), e))?;
 
     // refuse to delete symlinks - prevents deletion of symlink targets
     // which could be anywhere on the filesystem (including system directories)
@@ -271,16 +284,16 @@ fn delete_docker_object(obj_id: &str) -> Result<String, String> {
         .output();
 
     match output {
-        Ok(result) if result.status.success() => {
-            Ok(format!("deleted docker image: {obj_id}"))
-        }
+        Ok(result) if result.status.success() => Ok(format!("deleted docker image: {obj_id}")),
         Ok(result) => {
             let stderr = String::from_utf8_lossy(&result.stderr);
-            Err(format!("docker cleanup failed for {}: {}", obj_id, stderr.trim()))
+            Err(format!(
+                "docker cleanup failed for {}: {}",
+                obj_id,
+                stderr.trim()
+            ))
         }
-        Err(e) => {
-            Err(format!("failed to run docker command for {obj_id}: {e}"))
-        }
+        Err(e) => Err(format!("failed to run docker command for {obj_id}: {e}")),
     }
 }
 
@@ -305,18 +318,25 @@ fn delete_docker_aggregate(aggregate_type: &str) -> Result<String, String> {
     match output {
         Ok(result) if result.status.success() => {
             let stdout = String::from_utf8_lossy(&result.stdout);
-            Ok(format!("cleaned docker {}: {}", aggregate_type.to_lowercase(), stdout.trim()))
+            Ok(format!(
+                "cleaned docker {}: {}",
+                aggregate_type.to_lowercase(),
+                stdout.trim()
+            ))
         }
         Ok(result) => {
             let stderr = String::from_utf8_lossy(&result.stderr);
-            Err(format!("docker cleanup failed for {}: {}", aggregate_type, stderr.trim()))
+            Err(format!(
+                "docker cleanup failed for {}: {}",
+                aggregate_type,
+                stderr.trim()
+            ))
         }
-        Err(e) => {
-            Err(format!("failed to run docker command for {aggregate_type}: {e}"))
-        }
+        Err(e) => Err(format!(
+            "failed to run docker command for {aggregate_type}: {e}"
+        )),
     }
 }
-
 
 fn location_display(location: &Location) -> String {
     match location {
@@ -336,4 +356,3 @@ fn category_sort_order(category: &BloatCategory) -> u8 {
         BloatCategory::Other => 5,
     }
 }
-

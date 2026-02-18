@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::cli::{ScanArgs, CleanArgs};
+use crate::cli::{CleanArgs, ScanArgs};
 use crate::platform::{self, Platform};
 
 pub struct Config {
@@ -18,11 +18,10 @@ impl Config {
     pub fn from_scan_args(args: &ScanArgs) -> Self {
         let platform = platform::detect();
 
-        let roots = args.roots.clone().unwrap_or_else(|| {
-            platform::home_dir()
-                .map(|h| vec![h])
-                .unwrap_or_default()
-        });
+        let roots = args
+            .roots
+            .clone()
+            .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         Config {
             roots,
@@ -38,11 +37,10 @@ impl Config {
     pub fn from_clean_args(args: &CleanArgs) -> Self {
         let platform = platform::detect();
 
-        let roots = args.roots.clone().unwrap_or_else(|| {
-            platform::home_dir()
-                .map(|h| vec![h])
-                .unwrap_or_default()
-        });
+        let roots = args
+            .roots
+            .clone()
+            .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         Config {
             roots,
@@ -54,15 +52,12 @@ impl Config {
             platform,
         }
     }
-
 }
 
 impl Default for Config {
     fn default() -> Self {
         let platform = platform::detect();
-        let roots = platform::home_dir()
-            .map(|h| vec![h])
-            .unwrap_or_default();
+        let roots = platform::home_dir().map(|h| vec![h]).unwrap_or_default();
 
         Config {
             roots,

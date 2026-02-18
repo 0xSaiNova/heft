@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 use crate::config::Config;
 use crate::platform::{self, Platform};
-use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 
 pub struct CacheDetector;
 
@@ -24,17 +24,22 @@ impl Detector for CacheDetector {
         let mut diagnostics = Vec::new();
 
         if config.platform == Platform::Unknown {
-            diagnostics.push("unknown platform detected, falling back to Unix-like cache paths".to_string());
+            diagnostics.push(
+                "unknown platform detected, falling back to Unix-like cache paths".to_string(),
+            );
         }
 
         let home = match platform::home_dir() {
             Some(h) => h,
             None => {
-                return DetectorResult::with_diagnostic("could not determine home directory".into());
+                return DetectorResult::with_diagnostic(
+                    "could not determine home directory".into(),
+                );
             }
         };
 
-        let (caches, cache_diagnostics) = get_cache_locations(&home, config.platform, config.timeout);
+        let (caches, cache_diagnostics) =
+            get_cache_locations(&home, config.platform, config.timeout);
         diagnostics.extend(cache_diagnostics);
 
         for cache in caches {
@@ -65,7 +70,10 @@ impl Detector for CacheDetector {
             }
         }
 
-        DetectorResult { entries, diagnostics }
+        DetectorResult {
+            entries,
+            diagnostics,
+        }
     }
 }
 
@@ -76,7 +84,11 @@ struct CacheLocation {
     cleanup_hint: &'static str,
 }
 
-fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (Vec<CacheLocation>, Vec<String>) {
+fn get_cache_locations(
+    home: &Path,
+    platform: Platform,
+    timeout: Duration,
+) -> (Vec<CacheLocation>, Vec<String>) {
     let mut locations = Vec::new();
     let mut diagnostics = Vec::new();
 
@@ -91,7 +103,11 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // yarn cache
     let yarn_path = match platform {
         Platform::MacOS => home.join("Library/Caches/Yarn"),
-        Platform::Windows => home.join("AppData").join("Local").join("Yarn").join("Cache"),
+        Platform::Windows => home
+            .join("AppData")
+            .join("Local")
+            .join("Yarn")
+            .join("Cache"),
         Platform::Linux | Platform::Unknown => home.join(".cache/yarn"),
     };
     locations.push(CacheLocation {
@@ -104,7 +120,11 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
     // pnpm store
     let pnpm_path = match platform {
         Platform::MacOS => home.join("Library/pnpm/store"),
-        Platform::Windows => home.join("AppData").join("Local").join("pnpm").join("store"),
+        Platform::Windows => home
+            .join("AppData")
+            .join("Local")
+            .join("pnpm")
+            .join("store"),
         Platform::Linux | Platform::Unknown => home.join(".local/share/pnpm/store"),
     };
     locations.push(CacheLocation {
@@ -196,12 +216,46 @@ fn get_cache_locations(home: &Path, platform: Platform, timeout: Duration) -> (V
         cleanup_hint: "mvn dependency:purge-local-repository",
     });
 
+    // android avd images — emulator snapshots, can be 4-8 GB each
+    // only flag the avd subdirectory, not ~/.android root (contains keychains/device tokens)
+    locations.push(CacheLocation {
+        name: "android AVD images",
+        path: home.join(".android/avd"),
+        category: BloatCategory::IdeData,
+        cleanup_hint: "delete unused emulators via Android Studio AVD Manager",
+    });
+
+    // android sdk manager download cache
+    locations.push(CacheLocation {
+        name: "android SDK cache",
+        path: home.join(".android/cache"),
+        category: BloatCategory::IdeData,
+        cleanup_hint: "safe to delete, re-downloaded on next Android Studio sync",
+    });
+
+    // android sdk — platform-specific install location
+    let android_sdk_path = match platform {
+        Platform::MacOS => home.join("Library/Android/sdk"),
+        Platform::Windows => home
+            .join("AppData")
+            .join("Local")
+            .join("Android")
+            .join("Sdk"),
+        Platform::Linux | Platform::Unknown => home.join("Android/Sdk"),
+    };
+    locations.push(CacheLocation {
+        name: "android SDK",
+        path: android_sdk_path,
+        category: BloatCategory::IdeData,
+        cleanup_hint: "remove unused SDK versions via Android Studio SDK Manager",
+    });
+
     (locations, diagnostics)
 }
 
 fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
-    use std::process::Stdio;
     use std::io::Read;
+    use std::process::Stdio;
 
     let mut child = match Command::new("brew")
         .arg("--cache")
@@ -228,11 +282,17 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
                     if let Some(mut stderr_pipe) = child.stderr.take() {
                         let _ = stderr_pipe.read_to_string(&mut stderr);
                     }
-                    return Err(format!("brew --cache failed with status {}: {}", status.code().unwrap_or(-1), stderr.trim()));
+                    return Err(format!(
+                        "brew --cache failed with status {}: {}",
+                        status.code().unwrap_or(-1),
+                        stderr.trim()
+                    ));
                 }
 
                 let mut output = String::new();
-                let mut stdout = child.stdout.take()
+                let mut stdout = child
+                    .stdout
+                    .take()
                     .ok_or_else(|| "failed to capture brew stdout".to_string())?;
 
                 if let Err(e) = stdout.read_to_string(&mut output) {
@@ -248,7 +308,10 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
                 if path.exists() {
                     return Ok(Some(path));
                 } else {
-                    return Err(format!("brew returned path {} but it doesn't exist", path.display()));
+                    return Err(format!(
+                        "brew returned path {} but it doesn't exist",
+                        path.display()
+                    ));
                 }
             }
             Ok(None) => {
@@ -256,7 +319,10 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
                     let _ = child.kill();
                     // wait for process to actually terminate to avoid zombie process
                     let _ = child.wait();
-                    return Err(format!("brew --cache timed out after {} seconds", timeout.as_secs()));
+                    return Err(format!(
+                        "brew --cache timed out after {} seconds",
+                        timeout.as_secs()
+                    ));
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -267,3 +333,108 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn locations(platform: Platform) -> Vec<CacheLocation> {
+        let home = PathBuf::from("/home/testuser");
+        let (locs, _) = get_cache_locations(&home, platform, Duration::from_secs(5));
+        locs
+    }
+
+    fn find<'a>(locs: &'a [CacheLocation], name: &str) -> Option<&'a CacheLocation> {
+        locs.iter().find(|l| l.name == name)
+    }
+
+    // ── android paths ────────────────────────────────────────────────────────
+
+    #[test]
+    fn android_avd_path_present_on_linux() {
+        let locs = locations(Platform::Linux);
+        let avd = find(&locs, "android AVD images").unwrap();
+        assert_eq!(avd.path, PathBuf::from("/home/testuser/.android/avd"));
+        assert_eq!(avd.category, BloatCategory::IdeData);
+    }
+
+    #[test]
+    fn android_sdk_cache_path_present() {
+        let locs = locations(Platform::Linux);
+        let cache = find(&locs, "android SDK cache").unwrap();
+        assert_eq!(cache.path, PathBuf::from("/home/testuser/.android/cache"));
+    }
+
+    #[test]
+    fn android_sdk_path_linux() {
+        let locs = locations(Platform::Linux);
+        let sdk = find(&locs, "android SDK").unwrap();
+        assert_eq!(sdk.path, PathBuf::from("/home/testuser/Android/Sdk"));
+    }
+
+    #[test]
+    fn android_sdk_path_macos() {
+        let home = PathBuf::from("/Users/testuser");
+        let (locs, _) = get_cache_locations(&home, Platform::MacOS, Duration::from_secs(5));
+        let sdk = find(&locs, "android SDK").unwrap();
+        assert_eq!(
+            sdk.path,
+            PathBuf::from("/Users/testuser/Library/Android/sdk")
+        );
+    }
+
+    #[test]
+    fn android_sdk_path_windows() {
+        let home = PathBuf::from("C:\\Users\\testuser");
+        let (locs, _) = get_cache_locations(&home, Platform::Windows, Duration::from_secs(5));
+        let sdk = find(&locs, "android SDK").unwrap();
+        assert_eq!(
+            sdk.path,
+            PathBuf::from("C:\\Users\\testuser")
+                .join("AppData")
+                .join("Local")
+                .join("Android")
+                .join("Sdk")
+        );
+    }
+
+    // ── platform-specific paths ───────────────────────────────────────────────
+
+    #[test]
+    fn macos_pip_uses_library_caches() {
+        let home = PathBuf::from("/Users/testuser");
+        let (locs, _) = get_cache_locations(&home, Platform::MacOS, Duration::from_secs(5));
+        let pip = find(&locs, "pip cache").unwrap();
+        assert!(pip.path.to_string_lossy().contains("Library/Caches"));
+    }
+
+    #[test]
+    fn linux_pip_uses_dot_cache() {
+        let locs = locations(Platform::Linux);
+        let pip = find(&locs, "pip cache").unwrap();
+        assert!(pip.path.to_string_lossy().contains(".cache/pip"));
+    }
+
+    #[test]
+    fn macos_yarn_uses_library_caches() {
+        let home = PathBuf::from("/Users/testuser");
+        let (locs, _) = get_cache_locations(&home, Platform::MacOS, Duration::from_secs(5));
+        let yarn = find(&locs, "yarn cache").unwrap();
+        assert!(yarn.path.to_string_lossy().contains("Library/Caches"));
+    }
+
+    // ── categories ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn all_android_entries_are_ide_data() {
+        let locs = locations(Platform::Linux);
+        for name in &["android AVD images", "android SDK cache", "android SDK"] {
+            let loc = find(&locs, name).unwrap();
+            assert_eq!(
+                loc.category,
+                BloatCategory::IdeData,
+                "{name} should be IdeData"
+            );
+        }
+    }
+}

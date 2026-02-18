@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use heft::config::Config;
 use heft::scan;
 use std::fs;
@@ -10,7 +10,11 @@ mod fixtures {
     use super::*;
 
     /// Create a simple project with node_modules
-    pub fn create_node_project(base: &Path, depth: usize, modules_per_level: usize) -> std::io::Result<()> {
+    pub fn create_node_project(
+        base: &Path,
+        depth: usize,
+        modules_per_level: usize,
+    ) -> std::io::Result<()> {
         // Create package.json
         fs::write(
             base.join("package.json"),
@@ -18,7 +22,11 @@ mod fixtures {
         )?;
 
         // Create node_modules with depth
-        create_node_modules(base.join("node_modules").as_path(), depth, modules_per_level)?;
+        create_node_modules(
+            base.join("node_modules").as_path(),
+            depth,
+            modules_per_level,
+        )?;
         Ok(())
     }
 
@@ -89,11 +97,19 @@ edition = "2021"
     }
 
     /// Create a directory tree with many small files
-    pub fn create_deep_tree(base: &Path, depth: usize, files_per_dir: usize) -> std::io::Result<()> {
+    pub fn create_deep_tree(
+        base: &Path,
+        depth: usize,
+        files_per_dir: usize,
+    ) -> std::io::Result<()> {
         create_tree_recursive(base, depth, files_per_dir)
     }
 
-    fn create_tree_recursive(base: &Path, depth: usize, files_per_dir: usize) -> std::io::Result<()> {
+    fn create_tree_recursive(
+        base: &Path,
+        depth: usize,
+        files_per_dir: usize,
+    ) -> std::io::Result<()> {
         if depth == 0 {
             return Ok(());
         }
@@ -175,20 +191,16 @@ fn bench_node_modules_scan(c: &mut Criterion) {
     let mut group = c.benchmark_group("scan_node_modules");
 
     for depth in [2, 3, 4] {
-        group.bench_with_input(
-            BenchmarkId::new("depth", depth),
-            &depth,
-            |b, &depth| {
-                let temp_dir = TempDir::new().unwrap();
-                fixtures::create_node_project(temp_dir.path(), depth, 5).unwrap();
-                let config = create_bench_config(vec![temp_dir.path().to_path_buf()]);
+        group.bench_with_input(BenchmarkId::new("depth", depth), &depth, |b, &depth| {
+            let temp_dir = TempDir::new().unwrap();
+            fixtures::create_node_project(temp_dir.path(), depth, 5).unwrap();
+            let config = create_bench_config(vec![temp_dir.path().to_path_buf()]);
 
-                b.iter(|| {
-                    let result = scan::run(black_box(&config));
-                    black_box(result);
-                });
-            },
-        );
+            b.iter(|| {
+                let result = scan::run(black_box(&config));
+                black_box(result);
+            });
+        });
     }
 
     group.finish();
@@ -256,8 +268,14 @@ fn bench_memory_usage(c: &mut Criterion) {
             let result = scan::run(black_box(&config));
 
             // Validate memory tracking is working
-            assert!(result.peak_memory_bytes.is_some(), "Memory tracking should be enabled");
-            assert!(!result.detector_memory.is_empty(), "Per-detector memory should be tracked");
+            assert!(
+                result.peak_memory_bytes.is_some(),
+                "Memory tracking should be enabled"
+            );
+            assert!(
+                !result.detector_memory.is_empty(),
+                "Per-detector memory should be tracked"
+            );
 
             black_box(result);
         });
@@ -276,7 +294,10 @@ fn bench_timing_accuracy(c: &mut Criterion) {
 
             // Validate timing is captured
             assert!(result.duration_ms.is_some(), "Duration should be captured");
-            assert!(!result.detector_timings.is_empty(), "Per-detector timing should be captured");
+            assert!(
+                !result.detector_timings.is_empty(),
+                "Per-detector timing should be captured"
+            );
 
             black_box(result);
         });

@@ -87,7 +87,11 @@ fn detects_cargo_target_in_rust_project() {
     let debug = target.join("debug");
 
     fs::create_dir_all(&debug).unwrap();
-    fs::write(project.join("Cargo.toml"), "[package]\nname = \"my-crate\"\nversion = \"0.1.0\"").unwrap();
+    fs::write(
+        project.join("Cargo.toml"),
+        "[package]\nname = \"my-crate\"\nversion = \"0.1.0\"",
+    )
+    .unwrap();
     fs::write(debug.join("my-crate"), "fake binary content here").unwrap();
 
     let config = Config {
