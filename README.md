@@ -4,10 +4,26 @@
 
 build artifacts, docker layers, package caches, old node_modules from projects you haven't touched in a year. heft finds all of it in ~3 seconds and lets you clean it up without guessing.
 
+**with cargo:**
+
 ```bash
 git clone https://github.com/0xSaiNova/heft.git
-cd heft && cargo build --release && cp target/release/heft ~/.local/bin/
+cd heft && cargo install --path .
 ```
+
+**without cargo** — install Rust first (takes ~1 min), then run the above:
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+```powershell
+# Windows — run in PowerShell
+winget install Rustlang.Rustup
+```
+
+Restart your terminal after installing Rust, then run the `cargo install` line above.
 
 ---
 
