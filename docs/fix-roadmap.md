@@ -2,7 +2,7 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 23, 2026)
+## Status Summary (Updated: Feb 24, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
@@ -49,6 +49,21 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #28 - Android AVD/SDK detection (commit 4b6d959)
 - ✅ #21 - config file support (commit b16fc8a)
 - ✅ #23 - windows support (WSL2 detection, .NET artifacts, NuGet cache)
+
+**PR #85 review fixes: COMPLETE ✅**
+- ✅ O(n²) seen_artifacts/seen_projects → O(depth) ancestor walk
+- ✅ dead docker_available() removed
+- ✅ config booleans one-directional → added --no-json, --no-verbose, --no-progressive
+- ✅ no CLI flags for non-docker detectors → added --disable (comma-separated)
+- ✅ WSL username bails on multi-user → cmd.exe /c echo %USERNAME% fallback
+- ✅ WSL VHDX reports full size as reclaimable → reclaimable_bytes: 0
+- ✅ wrong diagnostic for disabled detectors → "disabled by config" vs "not available"
+- ✅ has_dotnet_project() read_dir on every bin/obj → fast-path exists() checks + file_name()
+- ✅ global.json false positive → removed (also used by Volta/npm workspaces, not .NET-only)
+- ✅ missing tests → 16 config merge unit tests + 3 .NET false positive integration tests
+- ✅ deny_unknown_fields on file config structs
+- ✅ TempDir in integration tests (cleanup on panic)
+- ✅ from_clean_args reads json/progressive from file config
 
 ---
 
@@ -210,7 +225,7 @@ let users customize scan roots and detector settings via `~/.config/heft/config.
 ### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support ✅ COMPLETE
 full Windows path support and testing. independent of other phase 8 items.
 
-**status: COMPLETE - is_wsl() uses WSL_INTEROP for true WSL2-only detection. WSL2 virtual disk detection via /mnt/c: Docker Desktop ext4.vhdx (both old and new paths) + all distro vhdx files under AppData/Local/Packages. .NET bin/obj detection with has_dotnet_project() guard (Directory.Build.props/global.json fast path + csproj/fsproj/vbproj/sln scan). NuGet cache (~/.nuget/packages). Fixed gradle cleanup hint (was rm -rf). Added .cs/.fs/.vb to source extensions.**
+**status: COMPLETE - is_wsl() uses WSL_INTEROP for true WSL2-only detection. WSL2 virtual disk detection via /mnt/c: Docker Desktop ext4.vhdx (both old and new paths) + all distro vhdx files under AppData/Local/Packages. .NET bin/obj detection with has_dotnet_project() guard (Directory.Build.props/packages.config/NuGet.Config fast path + csproj/fsproj/vbproj/sln scan). NuGet cache (~/.nuget/packages). Fixed gradle cleanup hint. Added .cs/.fs/.vb to source extensions.**
 
 ## future work
 

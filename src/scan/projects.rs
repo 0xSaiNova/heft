@@ -213,8 +213,9 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
 
 fn has_dotnet_project(dir: &Path) -> bool {
     // fast exists() checks — each is a single stat() call, no directory listing
+    // global.json is intentionally excluded: it's also used by Volta, npm workspaces,
+    // and other JS tooling, so it's not a reliable .NET-only marker.
     if dir.join("Directory.Build.props").exists()
-        || dir.join("global.json").exists()
         || dir.join("packages.config").exists()
         || dir.join("NuGet.Config").exists()
     {
