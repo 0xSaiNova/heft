@@ -44,7 +44,10 @@ fn load_file_config() -> Option<FileConfig> {
     match toml::from_str(&content) {
         Ok(cfg) => Some(cfg),
         Err(e) => {
-            eprintln!("warning: failed to parse config file {}: {e}", path.display());
+            eprintln!(
+                "warning: failed to parse config file {}: {e}",
+                path.display()
+            );
             None
         }
     }
@@ -53,10 +56,18 @@ fn load_file_config() -> Option<FileConfig> {
 /// Collect detector names disabled by the file config.
 fn disabled_from_file(det: &FileDetectorsConfig) -> HashSet<String> {
     let mut out = HashSet::new();
-    if det.docker == Some(false) { out.insert("docker".to_string()); }
-    if det.xcode == Some(false) { out.insert("xcode".to_string()); }
-    if det.projects == Some(false) { out.insert("projects".to_string()); }
-    if det.caches == Some(false) { out.insert("caches".to_string()); }
+    if det.docker == Some(false) {
+        out.insert("docker".to_string());
+    }
+    if det.xcode == Some(false) {
+        out.insert("xcode".to_string());
+    }
+    if det.projects == Some(false) {
+        out.insert("projects".to_string());
+    }
+    if det.caches == Some(false) {
+        out.insert("caches".to_string());
+    }
     out
 }
 
@@ -84,9 +95,11 @@ impl Config {
         let file = load_file_config().unwrap_or_default();
 
         // roots: CLI > file > home dir
-        let roots = args.roots.clone().or(file.scan.roots).unwrap_or_else(|| {
-            platform::home_dir().map(|h| vec![h]).unwrap_or_default()
-        });
+        let roots = args
+            .roots
+            .clone()
+            .or(file.scan.roots)
+            .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         // timeout: CLI > file > default 30s
         let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
@@ -117,9 +130,11 @@ impl Config {
         let platform = platform::detect();
         let file = load_file_config().unwrap_or_default();
 
-        let roots = args.roots.clone().or(file.scan.roots).unwrap_or_else(|| {
-            platform::home_dir().map(|h| vec![h]).unwrap_or_default()
-        });
+        let roots = args
+            .roots
+            .clone()
+            .or(file.scan.roots)
+            .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
         let verbose = args.verbose || file.scan.verbose.unwrap_or(false);
