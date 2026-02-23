@@ -49,12 +49,13 @@ impl Detector for CacheDetector {
 
             match super::calculate_dir_size(&cache.path) {
                 Ok((size, warnings)) if size > 0 => {
+                    let reclaimable = if cache.not_reclaimable { 0 } else { size };
                     entries.push(BloatEntry {
                         category: cache.category,
                         name: cache.name.clone(),
                         location: Location::FilesystemPath(cache.path.clone()),
                         size_bytes: size,
-                        reclaimable_bytes: size,
+                        reclaimable_bytes: reclaimable,
                         last_modified: None,
                         cleanup_hint: Some(cache.cleanup_hint.clone()),
                     });
@@ -83,6 +84,8 @@ struct CacheLocation {
     path: PathBuf,
     category: BloatCategory,
     cleanup_hint: String,
+    /// When true, size is reported but reclaimable_bytes is 0 (e.g. WSL VHDX disks).
+    not_reclaimable: bool,
 }
 
 impl CacheLocation {
@@ -97,6 +100,7 @@ impl CacheLocation {
             path,
             category,
             cleanup_hint: cleanup_hint.to_string(),
+            not_reclaimable: false,
         }
     }
 }
@@ -295,6 +299,7 @@ fn get_cache_locations(
                             path: vhdx,
                             category: BloatCategory::ContainerData,
                             cleanup_hint: "run 'wsl --shutdown' then compact with 'Optimize-VHD' in PowerShell (admin)".to_string(),
+                            not_reclaimable: true,
                         });
                     }
                 }
@@ -313,6 +318,7 @@ fn get_cache_locations(
                                 path: vhdx,
                                 category: BloatCategory::SystemCache,
                                 cleanup_hint: "run 'wsl --shutdown' then 'wsl --manage <distro> --set-sparse true' to enable sparse VHD".to_string(),
+                                not_reclaimable: true,
                             });
                         }
                     }
@@ -352,11 +358,48 @@ fn wsl_windows_username() -> Result<String, String> {
     match candidates.len() {
         0 => Err("WSL2: no user directories found under /mnt/c/Users".to_string()),
         1 => Ok(candidates.into_iter().next().unwrap()),
-        _ => Err(format!(
-            "WSL2: multiple Windows users found ({}), cannot determine which to scan",
-            candidates.join(", ")
-        )),
+        _ => {
+            // multiple users — ask Windows directly via WSL interop
+            wsl_username_via_cmd()
+                .and_then(|name| {
+                    // sanity check: the name should match one of the dirs we found
+                    if candidates.contains(&name) {
+                        Ok(name)
+                    } else {
+                        Err(format!(
+                            "WSL2: cmd.exe returned '{name}' but that directory doesn't exist under /mnt/c/Users"
+                        ))
+                    }
+                })
+                .map_err(|e| {
+                    format!(
+                        "WSL2: multiple Windows users found ({}) and fallback failed: {}",
+                        candidates.join(", "),
+                        e
+                    )
+                })
+        }
     }
+}
+
+/// Asks Windows for the current username via `cmd.exe /c echo %USERNAME%`.
+/// Only works when WSL interop is enabled (the default).
+fn wsl_username_via_cmd() -> Result<String, String> {
+    let output = Command::new("cmd.exe")
+        .args(["/c", "echo", "%USERNAME%"])
+        .output()
+        .map_err(|e| format!("failed to run cmd.exe: {e}"))?;
+
+    if !output.status.success() {
+        return Err("cmd.exe returned non-zero exit code".to_string());
+    }
+
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if name.is_empty() || name == "%USERNAME%" {
+        return Err("cmd.exe returned empty or unexpanded username".to_string());
+    }
+
+    Ok(name)
 }
 
 fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
@@ -548,8 +591,10 @@ mod tests {
 
     #[test]
     fn wsl_username_errors_when_no_mount() {
-        // /mnt/c/Users won't exist in the test environment (Linux CI)
-        // so wsl_windows_username should return Err
+        // skip in WSL2 where /mnt/c/Users is actually mounted
+        if platform::is_wsl() {
+            return;
+        }
         let result = wsl_windows_username();
         assert!(result.is_err());
     }

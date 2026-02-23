@@ -348,12 +348,17 @@ fn cache_entries_have_correct_category() {
 
     let result = scan::run(&config);
 
-    // any cache entries found should have PackageCache or IdeData category
+    // every entry should have a known category
     for entry in &result.entries {
         assert!(
-            entry.category == BloatCategory::PackageCache
-                || entry.category == BloatCategory::IdeData
-                || entry.category == BloatCategory::ProjectArtifacts,
+            matches!(
+                entry.category,
+                BloatCategory::PackageCache
+                    | BloatCategory::IdeData
+                    | BloatCategory::ProjectArtifacts
+                    | BloatCategory::ContainerData
+                    | BloatCategory::SystemCache
+            ),
             "unexpected category: {:?}",
             entry.category
         );
