@@ -281,6 +281,126 @@ fn does_not_detect_target_without_cargo_toml() {
 }
 
 // ============================================================================
+// .NET bin/obj detection tests
+// ============================================================================
+
+#[test]
+fn detects_dotnet_bin_obj_with_csproj() {
+    let temp = std::env::temp_dir().join("heft_test_dotnet");
+    let _ = fs::remove_dir_all(&temp);
+
+    let project = temp.join("MyApp");
+    let bin = project.join("bin").join("Debug").join("net8.0");
+    let obj = project.join("obj").join("Debug").join("net8.0");
+
+    fs::create_dir_all(&bin).unwrap();
+    fs::create_dir_all(&obj).unwrap();
+    fs::write(project.join("MyApp.csproj"), "<Project></Project>").unwrap();
+    fs::write(bin.join("MyApp.dll"), "fake dll").unwrap();
+    fs::write(obj.join("MyApp.cache"), "fake cache").unwrap();
+
+    let config = Config {
+        roots: vec![temp.clone()],
+        timeout: Duration::from_secs(30),
+        disabled_detectors: std::collections::HashSet::from(["docker".to_string()]),
+        json_output: false,
+        verbose: false,
+        progressive: false,
+        platform: Platform::Linux,
+    };
+
+    let result = scan::run(&config);
+    let projects = project_entries(&result);
+
+    // should detect both bin and obj as artifacts
+    assert!(
+        projects.len() >= 1,
+        "expected at least 1 .NET artifact, got {}",
+        projects.len()
+    );
+    assert!(
+        projects
+            .iter()
+            .any(|e| e.cleanup_hint.as_ref().unwrap().contains("dotnet")),
+        "expected dotnet cleanup hint"
+    );
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn does_not_detect_bin_without_dotnet_project() {
+    let temp = std::env::temp_dir().join("heft_test_bin_false_positive");
+    let _ = fs::remove_dir_all(&temp);
+
+    // plain bin/ and obj/ dirs with no .csproj — should NOT be detected
+    let project = temp.join("some-tool");
+    let bin = project.join("bin");
+    let obj = project.join("obj");
+
+    fs::create_dir_all(&bin).unwrap();
+    fs::create_dir_all(&obj).unwrap();
+    fs::write(bin.join("tool.sh"), "#!/bin/bash").unwrap();
+    fs::write(obj.join("data.o"), "fake object").unwrap();
+
+    let config = Config {
+        roots: vec![temp.clone()],
+        timeout: Duration::from_secs(30),
+        disabled_detectors: std::collections::HashSet::from(["docker".to_string()]),
+        json_output: false,
+        verbose: false,
+        progressive: false,
+        platform: Platform::Linux,
+    };
+
+    let result = scan::run(&config);
+    let projects = project_entries(&result);
+
+    assert!(
+        projects.is_empty(),
+        "bin/obj without .csproj should not be detected, got {} entries",
+        projects.len()
+    );
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+#[test]
+fn does_not_detect_obj_without_dotnet_project() {
+    let temp = std::env::temp_dir().join("heft_test_obj_false_positive");
+    let _ = fs::remove_dir_all(&temp);
+
+    // standalone obj/ with a README — not .NET
+    let project = temp.join("graphics-project");
+    let obj = project.join("obj");
+
+    fs::create_dir_all(&obj).unwrap();
+    fs::write(project.join("Makefile"), "all: build").unwrap();
+    fs::write(obj.join("model.obj"), "v 0 0 0").unwrap();
+
+    let config = Config {
+        roots: vec![temp.clone()],
+        timeout: Duration::from_secs(30),
+        disabled_detectors: std::collections::HashSet::from(["docker".to_string()]),
+        json_output: false,
+        verbose: false,
+        progressive: false,
+        platform: Platform::Linux,
+    };
+
+    let result = scan::run(&config);
+    let projects = project_entries(&result);
+
+    assert!(
+        projects.is_empty(),
+        "obj/ without .csproj should not be detected, got {} entries",
+        projects.len()
+    );
+
+    let _ = fs::remove_dir_all(&temp);
+}
+
+// ============================================================================
 // Cache detector tests
 // ============================================================================
 

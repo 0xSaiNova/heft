@@ -91,14 +91,18 @@ impl Config {
     }
 
     pub fn from_scan_args(args: &ScanArgs) -> Self {
-        let platform = platform::detect();
         let file = load_file_config().unwrap_or_default();
+        Self::merge_scan(args, &file)
+    }
+
+    fn merge_scan(args: &ScanArgs, file: &FileConfig) -> Self {
+        let platform = platform::detect();
 
         // roots: CLI > file > home dir
         let roots = args
             .roots
             .clone()
-            .or(file.scan.roots)
+            .or(file.scan.roots.clone())
             .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         // timeout: CLI > file > default 30s
@@ -200,5 +204,248 @@ impl Default for Config {
             progressive: false,
             platform,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::ScanArgs;
+
+    fn default_scan_args() -> ScanArgs {
+        ScanArgs {
+            roots: None,
+            json: false,
+            no_json: false,
+            no_docker: false,
+            disable: None,
+            timeout: None,
+            verbose: false,
+            no_verbose: false,
+            progressive: false,
+            no_progressive: false,
+        }
+    }
+
+    // ── disabled_from_file ──────────────────────────────────────────────────
+
+    #[test]
+    fn disabled_from_file_empty_config() {
+        let det = FileDetectorsConfig::default();
+        assert!(disabled_from_file(&det).is_empty());
+    }
+
+    #[test]
+    fn disabled_from_file_true_does_not_disable() {
+        let det = FileDetectorsConfig {
+            docker: Some(true),
+            xcode: Some(true),
+            projects: Some(true),
+            caches: Some(true),
+        };
+        assert!(disabled_from_file(&det).is_empty());
+    }
+
+    #[test]
+    fn disabled_from_file_false_disables() {
+        let det = FileDetectorsConfig {
+            docker: Some(false),
+            xcode: Some(false),
+            projects: None,
+            caches: Some(false),
+        };
+        let disabled = disabled_from_file(&det);
+        assert!(disabled.contains("docker"));
+        assert!(disabled.contains("xcode"));
+        assert!(disabled.contains("caches"));
+        assert!(!disabled.contains("projects"));
+    }
+
+    // ── merge_scan: timeout precedence ──────────────────────────────────────
+
+    #[test]
+    fn timeout_defaults_to_30() {
+        let args = default_scan_args();
+        let file = FileConfig::default();
+        let config = Config::merge_scan(&args, &file);
+        assert_eq!(config.timeout, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn timeout_file_overrides_default() {
+        let args = default_scan_args();
+        let file = FileConfig {
+            scan: FileScanConfig {
+                timeout: Some(60),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert_eq!(config.timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn timeout_cli_overrides_file() {
+        let args = ScanArgs {
+            timeout: Some(10),
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            scan: FileScanConfig {
+                timeout: Some(60),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert_eq!(config.timeout, Duration::from_secs(10));
+    }
+
+    // ── merge_scan: boolean flags ───────────────────────────────────────────
+
+    #[test]
+    fn verbose_defaults_to_false() {
+        let config = Config::merge_scan(&default_scan_args(), &FileConfig::default());
+        assert!(!config.verbose);
+    }
+
+    #[test]
+    fn verbose_file_turns_on() {
+        let file = FileConfig {
+            scan: FileScanConfig {
+                verbose: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&default_scan_args(), &file);
+        assert!(config.verbose);
+    }
+
+    #[test]
+    fn no_verbose_overrides_file() {
+        let args = ScanArgs {
+            no_verbose: true,
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            scan: FileScanConfig {
+                verbose: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert!(!config.verbose);
+    }
+
+    #[test]
+    fn json_flag_overrides_file_false() {
+        let args = ScanArgs {
+            json: true,
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            scan: FileScanConfig {
+                json: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert!(config.json_output);
+    }
+
+    #[test]
+    fn no_json_overrides_file_true() {
+        let args = ScanArgs {
+            no_json: true,
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            scan: FileScanConfig {
+                json: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert!(!config.json_output);
+    }
+
+    // ── merge_scan: disabled detectors ──────────────────────────────────────
+
+    #[test]
+    fn no_docker_flag_disables_docker() {
+        let args = ScanArgs {
+            no_docker: true,
+            ..default_scan_args()
+        };
+        let config = Config::merge_scan(&args, &FileConfig::default());
+        assert!(config.disabled_detectors.contains("docker"));
+    }
+
+    #[test]
+    fn disable_flag_disables_listed() {
+        let args = ScanArgs {
+            disable: Some(vec!["xcode".to_string(), "caches".to_string()]),
+            ..default_scan_args()
+        };
+        let config = Config::merge_scan(&args, &FileConfig::default());
+        assert!(config.disabled_detectors.contains("xcode"));
+        assert!(config.disabled_detectors.contains("caches"));
+        assert!(!config.disabled_detectors.contains("docker"));
+    }
+
+    #[test]
+    fn file_and_cli_disabled_merge() {
+        let args = ScanArgs {
+            no_docker: true,
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            detectors: FileDetectorsConfig {
+                xcode: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert!(config.disabled_detectors.contains("docker"));
+        assert!(config.disabled_detectors.contains("xcode"));
+    }
+
+    // ── merge_scan: roots precedence ────────────────────────────────────────
+
+    #[test]
+    fn roots_cli_overrides_file() {
+        let args = ScanArgs {
+            roots: Some(vec![PathBuf::from("/cli/path")]),
+            ..default_scan_args()
+        };
+        let file = FileConfig {
+            scan: FileScanConfig {
+                roots: Some(vec![PathBuf::from("/file/path")]),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert_eq!(config.roots, vec![PathBuf::from("/cli/path")]);
+    }
+
+    #[test]
+    fn roots_file_overrides_default() {
+        let args = default_scan_args();
+        let file = FileConfig {
+            scan: FileScanConfig {
+                roots: Some(vec![PathBuf::from("/file/path")]),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let config = Config::merge_scan(&args, &file);
+        assert_eq!(config.roots, vec![PathBuf::from("/file/path")]);
     }
 }
