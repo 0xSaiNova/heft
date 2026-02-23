@@ -69,7 +69,8 @@ fn scan_directory(
         let path = entry.path();
 
         // already inside something we detected, skip
-        if seen_artifacts.iter().any(|seen| path.starts_with(seen)) {
+        // walk ancestors instead of iterating all seen — O(depth) not O(n)
+        if path.ancestors().any(|a| seen_artifacts.contains(a)) {
             continue;
         }
 
@@ -83,10 +84,8 @@ fn scan_directory(
 
             // monorepos have node_modules at root and also in each package.
             // if weve seen the root already, skip the nested ones.
-            if seen_projects
-                .iter()
-                .any(|seen| project_root.starts_with(seen))
-            {
+            // walk ancestors instead of iterating all seen — O(depth) not O(n)
+            if project_root.ancestors().any(|a| seen_projects.contains(a)) {
                 seen_artifacts.insert(path.to_path_buf());
                 continue;
             }

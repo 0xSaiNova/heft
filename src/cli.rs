@@ -35,6 +35,10 @@ pub struct ScanArgs {
     #[arg(long, default_value_t = false)]
     pub json: bool,
 
+    /// Disable JSON output (overrides config file)
+    #[arg(long, conflicts_with = "json", hide_short_help = true)]
+    pub no_json: bool,
+
     /// Skip the Docker detector
     #[arg(long, default_value_t = false)]
     pub no_docker: bool,
@@ -47,9 +51,17 @@ pub struct ScanArgs {
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
 
+    /// Disable verbose output (overrides config file)
+    #[arg(long, conflicts_with = "verbose", hide_short_help = true)]
+    pub no_verbose: bool,
+
     /// Show progressive output as each detector completes
     #[arg(long, default_value_t = false)]
     pub progressive: bool,
+
+    /// Disable progressive output (overrides config file)
+    #[arg(long, conflicts_with = "progressive", hide_short_help = true)]
+    pub no_progressive: bool,
 }
 
 #[derive(Parser)]
@@ -112,6 +124,10 @@ pub struct CleanArgs {
     /// Show detailed output including diagnostics
     #[arg(long, short = 'v', default_value_t = false)]
     pub verbose: bool,
+
+    /// Disable verbose output (overrides config file)
+    #[arg(long, conflicts_with = "verbose", hide_short_help = true)]
+    pub no_verbose: bool,
 }
 
 #[derive(Parser)]

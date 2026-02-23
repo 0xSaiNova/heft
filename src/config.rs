@@ -104,10 +104,28 @@ impl Config {
         // timeout: CLI > file > default 30s
         let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
 
-        // booleans: CLI flag wins if true, otherwise fall back to file
-        let json_output = args.json || file.scan.json.unwrap_or(false);
-        let verbose = args.verbose || file.scan.verbose.unwrap_or(false);
-        let progressive = args.progressive || file.scan.progressive.unwrap_or(false);
+        // booleans: --flag forces on, --no-flag forces off, otherwise file config
+        let json_output = if args.no_json {
+            false
+        } else if args.json {
+            true
+        } else {
+            file.scan.json.unwrap_or(false)
+        };
+        let verbose = if args.no_verbose {
+            false
+        } else if args.verbose {
+            true
+        } else {
+            file.scan.verbose.unwrap_or(false)
+        };
+        let progressive = if args.no_progressive {
+            false
+        } else if args.progressive {
+            true
+        } else {
+            file.scan.progressive.unwrap_or(false)
+        };
 
         // disabled detectors: file config base, --no-docker adds to it
         let mut disabled = disabled_from_file(&file.detectors);
@@ -137,7 +155,13 @@ impl Config {
             .unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
 
         let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
-        let verbose = args.verbose || file.scan.verbose.unwrap_or(false);
+        let verbose = if args.no_verbose {
+            false
+        } else if args.verbose {
+            true
+        } else {
+            file.scan.verbose.unwrap_or(false)
+        };
 
         let mut disabled = disabled_from_file(&file.detectors);
         if args.no_docker {
