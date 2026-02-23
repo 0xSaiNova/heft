@@ -39,9 +39,13 @@ pub struct ScanArgs {
     #[arg(long, conflicts_with = "json", hide_short_help = true)]
     pub no_json: bool,
 
-    /// Skip the Docker detector
+    /// Skip the Docker detector (shorthand for --disable docker)
     #[arg(long, default_value_t = false)]
     pub no_docker: bool,
+
+    /// Disable specific detectors (comma-separated: docker,xcode,projects,caches)
+    #[arg(long, value_delimiter = ',')]
+    pub disable: Option<Vec<String>>,
 
     /// Per-detector timeout in seconds
     #[arg(long)]
@@ -113,9 +117,13 @@ pub struct CleanArgs {
     #[arg(long, value_delimiter = ',')]
     pub roots: Option<Vec<PathBuf>>,
 
-    /// Skip the Docker detector
+    /// Skip the Docker detector (shorthand for --disable docker)
     #[arg(long, default_value_t = false)]
     pub no_docker: bool,
+
+    /// Disable specific detectors (comma-separated: docker,xcode,projects,caches)
+    #[arg(long, value_delimiter = ',')]
+    pub disable: Option<Vec<String>>,
 
     /// Per-detector timeout in seconds
     #[arg(long)]

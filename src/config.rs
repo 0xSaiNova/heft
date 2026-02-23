@@ -127,10 +127,13 @@ impl Config {
             file.scan.progressive.unwrap_or(false)
         };
 
-        // disabled detectors: file config base, --no-docker adds to it
+        // disabled detectors: file config base, then CLI --no-docker / --disable
         let mut disabled = disabled_from_file(&file.detectors);
         if args.no_docker {
             disabled.insert("docker".to_string());
+        }
+        if let Some(ref names) = args.disable {
+            disabled.extend(names.iter().cloned());
         }
 
         Config {
@@ -166,6 +169,9 @@ impl Config {
         let mut disabled = disabled_from_file(&file.detectors);
         if args.no_docker {
             disabled.insert("docker".to_string());
+        }
+        if let Some(ref names) = args.disable {
+            disabled.extend(names.iter().cloned());
         }
 
         Config {
