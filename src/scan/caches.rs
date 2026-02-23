@@ -15,8 +15,8 @@ impl Detector for CacheDetector {
         "caches"
     }
 
-    fn available(&self, config: &Config) -> bool {
-        config.is_detector_enabled("caches")
+    fn available(&self, _config: &Config) -> bool {
+        true
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {

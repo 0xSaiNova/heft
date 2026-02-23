@@ -43,8 +43,8 @@ impl Detector for DockerDetector {
         "docker"
     }
 
-    fn available(&self, config: &Config) -> bool {
-        config.is_detector_enabled("docker")
+    fn available(&self, _config: &Config) -> bool {
+        true
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {

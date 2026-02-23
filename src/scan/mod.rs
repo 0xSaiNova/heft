@@ -72,7 +72,15 @@ pub fn run(config: &Config) -> ScanResult {
     for detector in detectors {
         let detector_name = detector.name();
 
-        // Skip unavailable detectors
+        // Skip disabled or unavailable detectors
+        if !config.is_detector_enabled(detector_name) {
+            let msg = format!("{detector_name}: skipped (disabled by config)");
+            if config.progressive {
+                eprintln!("{msg}");
+            }
+            scan_result.diagnostics.push(msg);
+            continue;
+        }
         if !detector.available(config) {
             let msg = format!("{detector_name}: skipped (not available on this platform)");
             if config.progressive {

@@ -17,7 +17,7 @@ impl Detector for XcodeDetector {
     }
 
     fn available(&self, config: &Config) -> bool {
-        config.platform == Platform::MacOS && config.is_detector_enabled("xcode")
+        config.platform == Platform::MacOS
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {
