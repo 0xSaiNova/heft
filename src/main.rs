@@ -1,13 +1,13 @@
 use clap::Parser;
-use heft::cli::{Cli, Command, CleanCategory};
-use heft::config::Config;
-use heft::scan;
-use heft::report;
 use heft::clean;
-use heft::store::snapshot::Store;
-use heft::util;
+use heft::cli::{CleanCategory, Cli, Command};
+use heft::config::Config;
+use heft::report;
+use heft::scan;
 use heft::scan::detector::BloatCategory;
 use heft::store::diff::{DiffResult, DiffType};
+use heft::store::snapshot::Store;
+use heft::util;
 use std::collections::HashMap;
 
 fn print_diff(result: &DiffResult) {
@@ -30,7 +30,8 @@ fn print_diff(result: &DiffResult) {
     }
 
     // group entries by category
-    let mut by_category: HashMap<BloatCategory, Vec<&heft::store::diff::DiffEntry>> = HashMap::new();
+    let mut by_category: HashMap<BloatCategory, Vec<&heft::store::diff::DiffEntry>> =
+        HashMap::new();
     for entry in &result.entries {
         by_category.entry(entry.category).or_default().push(entry);
     }
@@ -40,14 +41,28 @@ fn print_diff(result: &DiffResult) {
     categories.sort_by_key(|c| c.label());
 
     for category in categories {
-        let Some(entries) = by_category.get(category) else { continue };
+        let Some(entries) = by_category.get(category) else {
+            continue;
+        };
 
         println!("{}:", category.label());
 
-        let mut grew: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Grew)).collect();
-        let mut shrank: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Shrank)).collect();
-        let mut new: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::New)).collect();
-        let mut gone: Vec<_> = entries.iter().filter(|e| matches!(e.diff_type, DiffType::Gone)).collect();
+        let mut grew: Vec<_> = entries
+            .iter()
+            .filter(|e| matches!(e.diff_type, DiffType::Grew))
+            .collect();
+        let mut shrank: Vec<_> = entries
+            .iter()
+            .filter(|e| matches!(e.diff_type, DiffType::Shrank))
+            .collect();
+        let mut new: Vec<_> = entries
+            .iter()
+            .filter(|e| matches!(e.diff_type, DiffType::New))
+            .collect();
+        let mut gone: Vec<_> = entries
+            .iter()
+            .filter(|e| matches!(e.diff_type, DiffType::Gone))
+            .collect();
 
         grew.sort_by_key(|e| -(e.delta));
         shrank.sort_by_key(|e| e.delta);
@@ -55,7 +70,8 @@ fn print_diff(result: &DiffResult) {
         gone.sort_by_key(|e| e.delta);
 
         for entry in grew {
-            println!("  [+] {} grew {} -> {} (+{})",
+            println!(
+                "  [+] {} grew {} -> {} (+{})",
                 entry.name,
                 util::format_bytes(entry.old_size),
                 util::format_bytes(entry.new_size),
@@ -64,7 +80,8 @@ fn print_diff(result: &DiffResult) {
         }
 
         for entry in shrank {
-            println!("  [-] {} shrank {} -> {} (-{})",
+            println!(
+                "  [-] {} shrank {} -> {} (-{})",
                 entry.name,
                 util::format_bytes(entry.old_size),
                 util::format_bytes(entry.new_size),
@@ -73,14 +90,16 @@ fn print_diff(result: &DiffResult) {
         }
 
         for entry in new {
-            println!("  [new] {} appeared ({})",
+            println!(
+                "  [new] {} appeared ({})",
                 entry.name,
                 util::format_bytes(entry.new_size)
             );
         }
 
         for entry in gone {
-            println!("  [gone] {} cleaned up (was {})",
+            println!(
+                "  [gone] {} cleaned up (was {})",
                 entry.name,
                 util::format_bytes(entry.old_size)
             );
@@ -91,9 +110,15 @@ fn print_diff(result: &DiffResult) {
 
     // net change summary
     if result.net_change >= 0 {
-        println!("Net change: +{} of new bloat", util::format_bytes(result.net_change.unsigned_abs()));
+        println!(
+            "Net change: +{} of new bloat",
+            util::format_bytes(result.net_change.unsigned_abs())
+        );
     } else {
-        println!("Net change: {} freed", util::format_bytes(result.net_change.unsigned_abs()));
+        println!(
+            "Net change: {} freed",
+            util::format_bytes(result.net_change.unsigned_abs())
+        );
     }
 }
 
@@ -138,18 +163,25 @@ fn main() {
                             println!("No snapshots found. Run 'heft scan' to create one.");
                         } else {
                             println!("Snapshots:");
-                            println!("{:<6} {:<20} {:<12} {:<12}", "ID", "Date", "Total", "Reclaimable");
+                            println!(
+                                "{:<6} {:<20} {:<12} {:<12}",
+                                "ID", "Date", "Total", "Reclaimable"
+                            );
                             println!("{}", "-".repeat(60));
 
                             for snapshot in snapshots {
-                                let datetime = chrono::DateTime::from_timestamp(snapshot.timestamp, 0)
-                                    .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                                    .unwrap_or_else(|| "unknown".to_string());
+                                let datetime =
+                                    chrono::DateTime::from_timestamp(snapshot.timestamp, 0)
+                                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                                        .unwrap_or_else(|| "unknown".to_string());
 
                                 let total = util::format_bytes(snapshot.total_bytes);
                                 let reclaimable = util::format_bytes(snapshot.reclaimable_bytes);
 
-                                println!("{:<6} {:<20} {:<12} {:<12}", snapshot.id, datetime, total, reclaimable);
+                                println!(
+                                    "{:<6} {:<20} {:<12} {:<12}",
+                                    snapshot.id, datetime, total, reclaimable
+                                );
                             }
                         }
                     }
@@ -198,9 +230,15 @@ fn main() {
                                 .unwrap_or_else(|| "unknown".to_string());
 
                             println!("\nsnapshot: {} ({datetime})", snapshot.id);
-                            println!("scan duration: {:.2}s", snapshot.scan_duration_ms as f64 / 1000.0);
+                            println!(
+                                "scan duration: {:.2}s",
+                                snapshot.scan_duration_ms as f64 / 1000.0
+                            );
                             if let Some(mem) = snapshot.peak_memory_bytes {
-                                println!("peak memory: {:.1} MB", mem as f64 / 1_024_f64 / 1_024_f64);
+                                println!(
+                                    "peak memory: {:.1} MB",
+                                    mem as f64 / 1_024_f64 / 1_024_f64
+                                );
                             }
                         }
                     }
@@ -228,14 +266,24 @@ fn main() {
             };
 
             let category_filter = args.category.map(|cats| {
-                cats.into_iter().map(|c| match c {
-                    CleanCategory::ProjectArtifacts => heft::scan::detector::BloatCategory::ProjectArtifacts,
-                    CleanCategory::ContainerData => heft::scan::detector::BloatCategory::ContainerData,
-                    CleanCategory::PackageCache => heft::scan::detector::BloatCategory::PackageCache,
-                    CleanCategory::IdeData => heft::scan::detector::BloatCategory::IdeData,
-                    CleanCategory::SystemCache => heft::scan::detector::BloatCategory::SystemCache,
-                    CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
-                }).collect()
+                cats.into_iter()
+                    .map(|c| match c {
+                        CleanCategory::ProjectArtifacts => {
+                            heft::scan::detector::BloatCategory::ProjectArtifacts
+                        }
+                        CleanCategory::ContainerData => {
+                            heft::scan::detector::BloatCategory::ContainerData
+                        }
+                        CleanCategory::PackageCache => {
+                            heft::scan::detector::BloatCategory::PackageCache
+                        }
+                        CleanCategory::IdeData => heft::scan::detector::BloatCategory::IdeData,
+                        CleanCategory::SystemCache => {
+                            heft::scan::detector::BloatCategory::SystemCache
+                        }
+                        CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                    })
+                    .collect()
             });
 
             let clean_result = clean::run(&scan_result, mode, category_filter);

@@ -1,5 +1,5 @@
-pub mod table;
 pub mod json;
+pub mod table;
 
 use crate::config::Config;
 use crate::scan::ScanResult;
@@ -35,7 +35,8 @@ fn print_scan_info(result: &ScanResult, verbose: bool) {
                 let timing_sec = *timing_ms as f64 / 1000.0;
 
                 // Linear search for memory delta - only 3 detectors, faster than HashMap
-                let memory_delta = result.detector_memory
+                let memory_delta = result
+                    .detector_memory
                     .iter()
                     .find(|(name, _)| name == detector_name)
                     .map(|(_, delta)| *delta);

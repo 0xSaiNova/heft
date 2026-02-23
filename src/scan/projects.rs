@@ -7,8 +7,8 @@ use std::time::SystemTime;
 
 use walkdir::WalkDir;
 
-use crate::config::Config;
 use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
+use crate::config::Config;
 
 pub struct ProjectDetector;
 
@@ -28,14 +28,20 @@ impl Detector for ProjectDetector {
 
         for root in &config.roots {
             if !root.exists() {
-                diagnostics.push(format!("skipping {}: directory does not exist", root.display()));
+                diagnostics.push(format!(
+                    "skipping {}: directory does not exist",
+                    root.display()
+                ));
                 continue;
             }
 
             scan_directory(root, &mut entries, &mut seen_projects, &mut diagnostics);
         }
 
-        DetectorResult { entries, diagnostics }
+        DetectorResult {
+            entries,
+            diagnostics,
+        }
     }
 }
 
@@ -51,6 +57,7 @@ fn scan_directory(
 
     let walker = WalkDir::new(root)
         .follow_links(false)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|e| !is_hidden(e.file_name()));
 
@@ -62,7 +69,8 @@ fn scan_directory(
         let path = entry.path();
 
         // already inside something we detected, skip
-        if seen_artifacts.iter().any(|seen| path.starts_with(seen)) {
+        // walk ancestors instead of iterating all seen — O(depth) not O(n)
+        if path.ancestors().any(|a| seen_artifacts.contains(a)) {
             continue;
         }
 
@@ -76,7 +84,8 @@ fn scan_directory(
 
             // monorepos have node_modules at root and also in each package.
             // if weve seen the root already, skip the nested ones.
-            if seen_projects.iter().any(|seen| project_root.starts_with(seen)) {
+            // walk ancestors instead of iterating all seen — O(depth) not O(n)
+            if project_root.ancestors().any(|a| seen_projects.contains(a)) {
                 seen_artifacts.insert(path.to_path_buf());
                 continue;
             }
@@ -104,7 +113,11 @@ fn scan_directory(
                     }
                 }
                 Err(e) => {
-                    diagnostics.push(format!("failed to calculate size of {}: {}", path.display(), e));
+                    diagnostics.push(format!(
+                        "failed to calculate size of {}: {}",
+                        path.display(),
+                        e
+                    ));
                 }
             }
         }
@@ -136,10 +149,13 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
         // python caches show up everywhere including inside installed packages.
         // only count ones that are in actual projects, not in site-packages.
         "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".tox"
-            if !is_inside_installed_packages(path) => Some(ArtifactType {
+            if !is_inside_installed_packages(path) =>
+        {
+            Some(ArtifactType {
                 cleanup_hint: "safe to delete, regenerated automatically",
                 manifest_file: None,
-            }),
+            })
+        }
 
         ".venv" | "venv" if has_python_project(parent) => Some(ArtifactType {
             cleanup_hint: "virtual environment, recreate with python -m venv",
@@ -156,7 +172,9 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
             manifest_file: Some("composer.json"),
         }),
 
-        ".gradle" if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() => {
+        ".gradle"
+            if parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists() =>
+        {
             Some(ArtifactType {
                 cleanup_hint: "safe to delete, rebuild with gradle build",
                 manifest_file: None,
@@ -165,8 +183,11 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
 
         // only flag "build" dirs as gradle if they actually contain gradle artifacts
         // prevents false positives on legitimate build folders used for other purposes
-        "build" if (parent.join("build.gradle").exists() || parent.join("build.gradle.kts").exists())
-                && is_gradle_build_dir(path) => {
+        "build"
+            if (parent.join("build.gradle").exists()
+                || parent.join("build.gradle.kts").exists())
+                && is_gradle_build_dir(path) =>
+        {
             Some(ArtifactType {
                 cleanup_hint: "safe to delete, rebuild with gradle build",
                 manifest_file: None,
@@ -175,15 +196,46 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
 
         // only flag DerivedData if it's actually from xcode
         // check for xcode markers or being in the xcode cache location
-        "DerivedData" if is_xcode_derived_data(path, parent) => {
-            Some(ArtifactType {
-                cleanup_hint: "xcode build artifacts, safe to delete",
-                manifest_file: None,
-            })
-        }
+        "DerivedData" if is_xcode_derived_data(path, parent) => Some(ArtifactType {
+            cleanup_hint: "xcode build artifacts, safe to delete",
+            manifest_file: None,
+        }),
+
+        // .NET build output — only match if a project file is present
+        "bin" | "obj" if has_dotnet_project(parent) => Some(ArtifactType {
+            cleanup_hint: "safe to delete, rebuild with dotnet build",
+            manifest_file: None,
+        }),
 
         _ => None,
     }
+}
+
+fn has_dotnet_project(dir: &Path) -> bool {
+    // fast exists() checks — each is a single stat() call, no directory listing
+    // global.json is intentionally excluded: it's also used by Volta, npm workspaces,
+    // and other JS tooling, so it's not a reliable .NET-only marker.
+    if dir.join("Directory.Build.props").exists()
+        || dir.join("packages.config").exists()
+        || dir.join("NuGet.Config").exists()
+    {
+        return true;
+    }
+
+    // fall back to read_dir to find variable-named project files (*.csproj etc.)
+    // use file_name() directly to avoid allocating a full PathBuf per entry
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let name = e.file_name();
+                let s = name.to_str().unwrap_or("");
+                s.ends_with(".csproj")
+                    || s.ends_with(".fsproj")
+                    || s.ends_with(".vbproj")
+                    || s.ends_with(".sln")
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn has_python_project(dir: &Path) -> bool {
@@ -195,9 +247,15 @@ fn has_python_project(dir: &Path) -> bool {
 
 fn is_inside_installed_packages(path: &Path) -> bool {
     path.ancestors().any(|ancestor| {
-        ancestor.file_name()
+        ancestor
+            .file_name()
             .and_then(|n| n.to_str())
-            .map(|s| matches!(s, "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"))
+            .map(|s| {
+                matches!(
+                    s,
+                    "site-packages" | "dist-packages" | "node_modules" | ".venv" | "venv"
+                )
+            })
             .unwrap_or(false)
     })
 }
@@ -220,7 +278,8 @@ fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
     let in_xcode_cache = path.ancestors().any(|ancestor| {
         if let (Some(name), Some(parent)) = (ancestor.file_name(), ancestor.parent()) {
             name.to_str() == Some("Xcode")
-                && parent.file_name()
+                && parent
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .map(|s| s == "Developer")
                     .unwrap_or(false)
@@ -233,15 +292,15 @@ fn is_xcode_derived_data(path: &Path, parent: &Path) -> bool {
     // bounded to home directory and capped at 10 levels to avoid walking
     // all the way up to / and calling read_dir on every ancestor.
     let home = crate::platform::home_dir();
-    let has_xcode_project = parent.ancestors()
-        .take_while(|ancestor| {
-            home.as_deref().map(|h| *ancestor != h).unwrap_or(true)
-        })
+    let has_xcode_project = parent
+        .ancestors()
+        .take_while(|ancestor| home.as_deref().map(|h| *ancestor != h).unwrap_or(true))
         .take(10)
         .any(|ancestor| {
             if let Ok(entries) = std::fs::read_dir(ancestor) {
                 entries.flatten().any(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .and_then(|ext| ext.to_str())
                         .map(|s| s == "xcodeproj" || s == "xcworkspace")
                         .unwrap_or(false)
@@ -268,7 +327,10 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
             if !s.starts_with('.') {
                 return false;
             }
-            !matches!(s, ".venv" | ".pytest_cache" | ".mypy_cache" | ".tox" | ".gradle")
+            !matches!(
+                s,
+                ".venv" | ".pytest_cache" | ".mypy_cache" | ".tox" | ".gradle"
+            )
         })
         .unwrap_or(false)
 }
@@ -302,7 +364,9 @@ fn read_project_name_from_manifest(path: &Path) -> Option<String> {
     match filename {
         "package.json" => extract_json_field(&content, "name"),
         "Cargo.toml" => extract_toml_package_name(&content),
-        "go.mod" => content.lines().next()
+        "go.mod" => content
+            .lines()
+            .next()
             .and_then(|line| line.strip_prefix("module "))
             .map(|s| s.trim().to_string()),
         _ => None,
@@ -349,7 +413,9 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
 // used to identify stale projects that havent been touched in a while.
 fn get_source_last_modified(project_root: &Path) -> Option<i64> {
     let mut latest: Option<SystemTime> = None;
-    let source_extensions = ["rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift"];
+    let source_extensions = [
+        "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift", "cs", "fs", "vb",
+    ];
 
     // only check top few levels, dont need to go deep.
     // filter_entry prunes descent into artifact directories entirely, not just
@@ -363,14 +429,29 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
             if !e.file_type().is_dir() {
                 return true;
             }
-            e.file_name().to_str()
-                .map(|s| !matches!(s, "node_modules" | "target" | ".venv" | "venv" | "vendor" | "__pycache__" | "build" | "dist"))
+            e.file_name()
+                .to_str()
+                .map(|s| {
+                    !matches!(
+                        s,
+                        "node_modules"
+                            | "target"
+                            | ".venv"
+                            | "venv"
+                            | "vendor"
+                            | "__pycache__"
+                            | "build"
+                            | "dist"
+                    )
+                })
                 .unwrap_or(true)
         })
         .filter_map(|e| e.ok())
     {
         if entry.file_type().is_file() {
-            let is_source = entry.path().extension()
+            let is_source = entry
+                .path()
+                .extension()
                 .and_then(|e| e.to_str())
                 .map(|ext| source_extensions.contains(&ext))
                 .unwrap_or(false);
@@ -385,6 +466,7 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
         }
     }
 
-    latest.and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+    latest
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
 }

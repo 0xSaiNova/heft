@@ -1,6 +1,6 @@
 [package]
 name = "heft"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.75"
 description = "A disk space auditor for developers that identifies reclaimable build artifacts, caches, and container data"
@@ -41,6 +41,9 @@ directories = "5"
 # datetime formatting for snapshot timestamps
 # convert unix timestamps to human-readable dates
 chrono = "0.4"
+
+# toml parsing for config file (~/.config/heft/config.toml)
+toml = "0.8"
 
 [dev-dependencies]
 # criterion for detailed benchmarking with statistical analysis
