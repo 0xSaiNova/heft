@@ -5,9 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-02-23
+
+### Added
+- `--disable` flag to skip specific detectors for a single run (e.g. `--disable docker,xcode`) (#23)
+- .NET `bin`/`obj` artifact detection with csproj/fsproj/vbproj/sln/NuGet.Config markers (#23)
+- NuGet cache detection (#23)
+- WSL2 virtual disk (ext4.vhdx) detection under IDE/container data (#23)
+- Android AVD emulator image and SDK detection (#23)
 
 ### Fixed
+- WSL virtual disk (ext4.vhdx) reported full size as reclaimable; now correctly shows 0 reclaimable (#23)
+- WSL username lookup failed in multi-user setups; now falls back to `cmd.exe /c echo %USERNAME%` (#23)
+- Disabled detectors showed "not available on this platform" in verbose output; now correctly says "disabled by config" (#23)
+- `has_dotnet_project()` ran `read_dir` on every `bin/`/`obj/` directory; now uses fast-path `exists()` checks first (#23)
+- `global.json` was included as a .NET project marker; removed since it is also used by Volta and npm workspaces (#23)
+- `#[serde(deny_unknown_fields)]` added to config structs so unknown keys in `config.toml` produce a clear error (#23)
+- `from_clean_args` did not apply `json_output`/`progressive` from file config (#23)
 - Integer overflow in diff engine delta calculations - `size_bytes as i64` silently truncated large values, negating the result could panic in debug mode on i64::MIN. Now uses `i64::try_from` with saturating arithmetic throughout (#78)
 - `make_key` in diff engine used `{:?}` debug format for snapshot lookup keys - any variant rename would silently break old snapshot matching. Now uses `as_str()` which is the stable DB representation (#78)
 - `total_bytes` fold in `save_snapshot` used wrapping addition, now uses `saturating_add` (#78)
