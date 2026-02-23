@@ -202,8 +202,31 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
             manifest_file: None,
         }),
 
+        // .NET build output — only match if a project file is present
+        "bin" | "obj" if has_dotnet_project(parent) => Some(ArtifactType {
+            cleanup_hint: "safe to delete, rebuild with dotnet build",
+            manifest_file: None,
+        }),
+
         _ => None,
     }
+}
+
+fn has_dotnet_project(dir: &Path) -> bool {
+    // fast exists() checks — avoids read_dir on every bin/obj dir in the scan
+    dir.join("Directory.Build.props").exists()
+        || dir.join("global.json").exists()
+        || std::fs::read_dir(dir)
+            .map(|entries| {
+                entries.flatten().any(|e| {
+                    e.path()
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|s| matches!(s, "csproj" | "fsproj" | "vbproj" | "sln"))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
 }
 
 fn has_python_project(dir: &Path) -> bool {
@@ -382,7 +405,7 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
 fn get_source_last_modified(project_root: &Path) -> Option<i64> {
     let mut latest: Option<SystemTime> = None;
     let source_extensions = [
-        "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift",
+        "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift", "cs", "fs", "vb",
     ];
 
     // only check top few levels, dont need to go deep.

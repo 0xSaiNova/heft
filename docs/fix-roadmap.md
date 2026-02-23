@@ -44,11 +44,11 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #82 - snapshot connection reuse, FK enforcement, silent error swallowing, module placement
 - ✅ #83 - walkdir descent not pruned, unbounded xcode ancestor walk
 
-**Phase 8: IN PROGRESS**
+**Phase 8: COMPLETE ✅**
 - ✅ #22 - Xcode DerivedData detector for macOS (commit 7de9c9b)
 - ✅ #28 - Android AVD/SDK detection (commit 4b6d959)
 - ✅ #21 - config file support (commit b16fc8a)
-- ⬜ #23 - windows support
+- ✅ #23 - windows support (WSL2 detection, .NET artifacts, NuGet cache)
 
 ---
 
@@ -207,8 +207,10 @@ let users customize scan roots and detector settings via `~/.config/heft/config.
 
 **status: COMPLETE in commit b16fc8a - reads [scan] and [detectors] sections from TOML config. CLI flags always win over file config. replaced skip_docker: bool with disabled_detectors: Vec<String> so --no-docker and detectors.docker = false both route through the same path. added toml = "0.8" dep.**
 
-### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support
+### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support ✅ COMPLETE
 full Windows path support and testing. independent of other phase 8 items.
+
+**status: COMPLETE - is_wsl() uses WSL_INTEROP for true WSL2-only detection. WSL2 virtual disk detection via /mnt/c: Docker Desktop ext4.vhdx (both old and new paths) + all distro vhdx files under AppData/Local/Packages. .NET bin/obj detection with has_dotnet_project() guard (Directory.Build.props/global.json fast path + csproj/fsproj/vbproj/sln scan). NuGet cache (~/.nuget/packages). Fixed gradle cleanup hint (was rm -rf). Added .cs/.fs/.vb to source extensions.**
 
 ## future work
 

@@ -31,3 +31,10 @@ pub fn docker_available() -> bool {
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
+
+/// Returns true when heft is running inside a WSL2 environment.
+/// WSL_INTEROP is set exclusively by WSL2 (not WSL1) and points to the
+/// interop socket. WSL_DISTRO_NAME is set by both WSL1 and WSL2.
+pub fn is_wsl() -> bool {
+    std::env::var_os("WSL_INTEROP").is_some()
+}

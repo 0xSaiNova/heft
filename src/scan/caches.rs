@@ -51,12 +51,12 @@ impl Detector for CacheDetector {
                 Ok((size, warnings)) if size > 0 => {
                     entries.push(BloatEntry {
                         category: cache.category,
-                        name: cache.name.to_string(),
+                        name: cache.name.clone(),
                         location: Location::FilesystemPath(cache.path.clone()),
                         size_bytes: size,
                         reclaimable_bytes: size,
                         last_modified: None,
-                        cleanup_hint: Some(cache.cleanup_hint.to_string()),
+                        cleanup_hint: Some(cache.cleanup_hint.clone()),
                     });
 
                     for warning in warnings {
@@ -77,11 +77,28 @@ impl Detector for CacheDetector {
     }
 }
 
+// String fields so WSL entries can include dynamic names (distro package name).
 struct CacheLocation {
-    name: &'static str,
+    name: String,
     path: PathBuf,
     category: BloatCategory,
-    cleanup_hint: &'static str,
+    cleanup_hint: String,
+}
+
+impl CacheLocation {
+    fn new(
+        name: &'static str,
+        path: PathBuf,
+        category: BloatCategory,
+        cleanup_hint: &'static str,
+    ) -> Self {
+        CacheLocation {
+            name: name.to_string(),
+            path,
+            category,
+            cleanup_hint: cleanup_hint.to_string(),
+        }
+    }
 }
 
 fn get_cache_locations(
@@ -93,12 +110,12 @@ fn get_cache_locations(
     let mut diagnostics = Vec::new();
 
     // npm cache
-    locations.push(CacheLocation {
-        name: "npm cache",
-        path: home.join(".npm"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "npm cache clean --force",
-    });
+    locations.push(CacheLocation::new(
+        "npm cache",
+        home.join(".npm"),
+        BloatCategory::PackageCache,
+        "npm cache clean --force",
+    ));
 
     // yarn cache
     let yarn_path = match platform {
@@ -110,12 +127,12 @@ fn get_cache_locations(
             .join("Cache"),
         Platform::Linux | Platform::Unknown => home.join(".cache/yarn"),
     };
-    locations.push(CacheLocation {
-        name: "yarn cache",
-        path: yarn_path,
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "yarn cache clean",
-    });
+    locations.push(CacheLocation::new(
+        "yarn cache",
+        yarn_path,
+        BloatCategory::PackageCache,
+        "yarn cache clean",
+    ));
 
     // pnpm store
     let pnpm_path = match platform {
@@ -127,12 +144,12 @@ fn get_cache_locations(
             .join("store"),
         Platform::Linux | Platform::Unknown => home.join(".local/share/pnpm/store"),
     };
-    locations.push(CacheLocation {
-        name: "pnpm store",
-        path: pnpm_path,
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "pnpm store prune",
-    });
+    locations.push(CacheLocation::new(
+        "pnpm store",
+        pnpm_path,
+        BloatCategory::PackageCache,
+        "pnpm store prune",
+    ));
 
     // pip cache
     let pip_path = match platform {
@@ -140,36 +157,36 @@ fn get_cache_locations(
         Platform::Windows => home.join("AppData").join("Local").join("pip").join("Cache"),
         Platform::Linux | Platform::Unknown => home.join(".cache/pip"),
     };
-    locations.push(CacheLocation {
-        name: "pip cache",
-        path: pip_path,
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "pip cache purge",
-    });
+    locations.push(CacheLocation::new(
+        "pip cache",
+        pip_path,
+        BloatCategory::PackageCache,
+        "pip cache purge",
+    ));
 
     // cargo registry and git checkouts
-    locations.push(CacheLocation {
-        name: "cargo registry",
-        path: home.join(".cargo/registry"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "cargo cache --autoclean (requires cargo-cache)",
-    });
-    locations.push(CacheLocation {
-        name: "cargo git",
-        path: home.join(".cargo/git"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "cargo cache --autoclean (requires cargo-cache)",
-    });
+    locations.push(CacheLocation::new(
+        "cargo registry",
+        home.join(".cargo/registry"),
+        BloatCategory::PackageCache,
+        "cargo cache --autoclean (requires cargo-cache)",
+    ));
+    locations.push(CacheLocation::new(
+        "cargo git",
+        home.join(".cargo/git"),
+        BloatCategory::PackageCache,
+        "cargo cache --autoclean (requires cargo-cache)",
+    ));
 
     // homebrew cache (macOS and Linux)
     match get_homebrew_cache(timeout) {
         Ok(Some(brew_cache)) => {
-            locations.push(CacheLocation {
-                name: "homebrew cache",
-                path: brew_cache,
-                category: BloatCategory::PackageCache,
-                cleanup_hint: "brew cleanup",
-            });
+            locations.push(CacheLocation::new(
+                "homebrew cache",
+                brew_cache,
+                BloatCategory::PackageCache,
+                "brew cleanup",
+            ));
         }
         Ok(None) => {
             // brew not installed, this is normal
@@ -180,12 +197,12 @@ fn get_cache_locations(
     }
 
     // go module cache
-    locations.push(CacheLocation {
-        name: "go module cache",
-        path: home.join("go/pkg/mod"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "go clean -modcache",
-    });
+    locations.push(CacheLocation::new(
+        "go module cache",
+        home.join("go/pkg/mod"),
+        BloatCategory::PackageCache,
+        "go clean -modcache",
+    ));
 
     // VS Code extensions and cache
     let vscode_path = match platform {
@@ -193,45 +210,53 @@ fn get_cache_locations(
         Platform::Windows => home.join("AppData").join("Roaming").join("Code"),
         Platform::Linux | Platform::Unknown => home.join(".config/Code"),
     };
-    locations.push(CacheLocation {
-        name: "vscode data",
-        path: vscode_path,
-        category: BloatCategory::IdeData,
-        cleanup_hint: "clear from within vscode or delete unused extensions",
-    });
+    locations.push(CacheLocation::new(
+        "vscode data",
+        vscode_path,
+        BloatCategory::IdeData,
+        "clear from within vscode or delete unused extensions",
+    ));
 
-    // gradle cache
-    locations.push(CacheLocation {
-        name: "gradle cache",
-        path: home.join(".gradle/caches"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "rm -rf ~/.gradle/caches",
-    });
+    // gradle cache — cross-platform dotfile path, same on all OSes
+    locations.push(CacheLocation::new(
+        "gradle cache",
+        home.join(".gradle/caches"),
+        BloatCategory::PackageCache,
+        "safe to delete, rebuilt on next gradle build",
+    ));
 
     // maven cache
-    locations.push(CacheLocation {
-        name: "maven cache",
-        path: home.join(".m2/repository"),
-        category: BloatCategory::PackageCache,
-        cleanup_hint: "mvn dependency:purge-local-repository",
-    });
+    locations.push(CacheLocation::new(
+        "maven cache",
+        home.join(".m2/repository"),
+        BloatCategory::PackageCache,
+        "mvn dependency:purge-local-repository",
+    ));
+
+    // nuget package cache — cross-platform dotfile path, most relevant on Windows
+    locations.push(CacheLocation::new(
+        "nuget cache",
+        home.join(".nuget").join("packages"),
+        BloatCategory::PackageCache,
+        "dotnet nuget locals all --clear",
+    ));
 
     // android avd images — emulator snapshots, can be 4-8 GB each
     // only flag the avd subdirectory, not ~/.android root (contains keychains/device tokens)
-    locations.push(CacheLocation {
-        name: "android AVD images",
-        path: home.join(".android/avd"),
-        category: BloatCategory::IdeData,
-        cleanup_hint: "delete unused emulators via Android Studio AVD Manager",
-    });
+    locations.push(CacheLocation::new(
+        "android AVD images",
+        home.join(".android/avd"),
+        BloatCategory::IdeData,
+        "delete unused emulators via Android Studio AVD Manager",
+    ));
 
     // android sdk manager download cache
-    locations.push(CacheLocation {
-        name: "android SDK cache",
-        path: home.join(".android/cache"),
-        category: BloatCategory::IdeData,
-        cleanup_hint: "safe to delete, re-downloaded on next Android Studio sync",
-    });
+    locations.push(CacheLocation::new(
+        "android SDK cache",
+        home.join(".android/cache"),
+        BloatCategory::IdeData,
+        "safe to delete, re-downloaded on next Android Studio sync",
+    ));
 
     // android sdk — platform-specific install location
     let android_sdk_path = match platform {
@@ -243,14 +268,95 @@ fn get_cache_locations(
             .join("Sdk"),
         Platform::Linux | Platform::Unknown => home.join("Android/Sdk"),
     };
-    locations.push(CacheLocation {
-        name: "android SDK",
-        path: android_sdk_path,
-        category: BloatCategory::IdeData,
-        cleanup_hint: "remove unused SDK versions via Android Studio SDK Manager",
-    });
+    locations.push(CacheLocation::new(
+        "android SDK",
+        android_sdk_path,
+        BloatCategory::IdeData,
+        "remove unused SDK versions via Android Studio SDK Manager",
+    ));
+
+    // WSL2 virtual disk detection — when running inside WSL2, the distro's
+    // ext4.vhdx grows as files are written but never shrinks automatically.
+    // Windows drives are mounted at /mnt/c, so we can read AppData paths.
+    // WSL_INTEROP is set exclusively by WSL2 (not WSL1), so this is safe.
+    if platform::is_wsl() {
+        match wsl_windows_username() {
+            Ok(win_user) => {
+                let win_local = PathBuf::from("/mnt/c/Users")
+                    .join(&win_user)
+                    .join("AppData/Local");
+
+                // Docker Desktop WSL2 disks — path varies by version
+                for docker_rel in &["Docker/wsl/data/ext4.vhdx", "Docker/wsl/distro/ext4.vhdx"] {
+                    let vhdx = win_local.join(docker_rel);
+                    if vhdx.exists() {
+                        locations.push(CacheLocation {
+                            name: "docker desktop WSL2 disk".to_string(),
+                            path: vhdx,
+                            category: BloatCategory::ContainerData,
+                            cleanup_hint: "run 'wsl --shutdown' then compact with 'Optimize-VHD' in PowerShell (admin)".to_string(),
+                        });
+                    }
+                }
+
+                // WSL distro virtual disks — scan all Packages entries for ext4.vhdx
+                // rather than filtering by publisher prefix (Debian, Kali, openSUSE etc.
+                // all use different prefixes but the vhdx path is consistent).
+                let packages_dir = win_local.join("Packages");
+                if let Ok(entries) = std::fs::read_dir(&packages_dir) {
+                    for entry in entries.flatten() {
+                        let vhdx = entry.path().join("LocalState/ext4.vhdx");
+                        if vhdx.exists() {
+                            let pkg_name = entry.file_name().to_string_lossy().into_owned();
+                            locations.push(CacheLocation {
+                                name: format!("WSL2 distro disk ({pkg_name})"),
+                                path: vhdx,
+                                category: BloatCategory::SystemCache,
+                                cleanup_hint: "run 'wsl --shutdown' then 'wsl --manage <distro> --set-sparse true' to enable sparse VHD".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+            Err(msg) => {
+                diagnostics.push(msg);
+            }
+        }
+    }
 
     (locations, diagnostics)
+}
+
+/// Resolves the Windows username when running inside WSL2.
+/// Returns an error string (suitable for diagnostics) if it cannot be determined safely.
+fn wsl_windows_username() -> Result<String, String> {
+    // /mnt/c/Users may not be mounted if the Windows drive is unavailable
+    let users_dir = PathBuf::from("/mnt/c/Users");
+    if !users_dir.exists() {
+        return Err(
+            "WSL2 detected but /mnt/c/Users is not mounted — skipping Windows disk detection"
+                .to_string(),
+        );
+    }
+
+    let system_names = ["Public", "Default", "Default User", "All Users"];
+
+    let candidates: Vec<String> = std::fs::read_dir(&users_dir)
+        .map_err(|e| format!("WSL2: could not read /mnt/c/Users: {e}"))?
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| !system_names.contains(&name.as_str()))
+        .collect();
+
+    match candidates.len() {
+        0 => Err("WSL2: no user directories found under /mnt/c/Users".to_string()),
+        1 => Ok(candidates.into_iter().next().unwrap()),
+        _ => Err(format!(
+            "WSL2: multiple Windows users found ({}), cannot determine which to scan",
+            candidates.join(", ")
+        )),
+    }
 }
 
 fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
@@ -434,6 +540,30 @@ mod tests {
                 loc.category,
                 BloatCategory::IdeData,
                 "{name} should be IdeData"
+            );
+        }
+    }
+
+    // ── wsl username resolution ───────────────────────────────────────────────
+
+    #[test]
+    fn wsl_username_errors_when_no_mount() {
+        // /mnt/c/Users won't exist in the test environment (Linux CI)
+        // so wsl_windows_username should return Err
+        let result = wsl_windows_username();
+        assert!(result.is_err());
+    }
+
+    // ── nuget cache ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn nuget_cache_present_on_all_platforms() {
+        for platform in [Platform::Linux, Platform::MacOS, Platform::Windows] {
+            let home = PathBuf::from("/home/testuser");
+            let (locs, _) = get_cache_locations(&home, platform, Duration::from_secs(5));
+            assert!(
+                find(&locs, "nuget cache").is_some(),
+                "nuget cache missing on {platform:?}"
             );
         }
     }
