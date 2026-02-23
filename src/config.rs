@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -49,21 +50,13 @@ fn load_file_config() -> Option<FileConfig> {
     }
 }
 
-/// Return a list of detector names disabled by the file config.
-fn disabled_from_file(det: &FileDetectorsConfig) -> Vec<String> {
-    let mut out = Vec::new();
-    if det.docker == Some(false) {
-        out.push("docker".to_string());
-    }
-    if det.xcode == Some(false) {
-        out.push("xcode".to_string());
-    }
-    if det.projects == Some(false) {
-        out.push("projects".to_string());
-    }
-    if det.caches == Some(false) {
-        out.push("caches".to_string());
-    }
+/// Collect detector names disabled by the file config.
+fn disabled_from_file(det: &FileDetectorsConfig) -> HashSet<String> {
+    let mut out = HashSet::new();
+    if det.docker == Some(false) { out.insert("docker".to_string()); }
+    if det.xcode == Some(false) { out.insert("xcode".to_string()); }
+    if det.projects == Some(false) { out.insert("projects".to_string()); }
+    if det.caches == Some(false) { out.insert("caches".to_string()); }
     out
 }
 
@@ -74,7 +67,7 @@ fn disabled_from_file(det: &FileDetectorsConfig) -> Vec<String> {
 pub struct Config {
     pub roots: Vec<PathBuf>,
     pub timeout: Duration,
-    pub disabled_detectors: Vec<String>,
+    pub disabled_detectors: HashSet<String>,
     pub json_output: bool,
     pub verbose: bool,
     pub progressive: bool,
@@ -83,7 +76,7 @@ pub struct Config {
 
 impl Config {
     pub fn is_detector_enabled(&self, name: &str) -> bool {
-        !self.disabled_detectors.iter().any(|d| d == name)
+        !self.disabled_detectors.contains(name)
     }
 
     pub fn from_scan_args(args: &ScanArgs) -> Self {
@@ -95,23 +88,18 @@ impl Config {
             platform::home_dir().map(|h| vec![h]).unwrap_or_default()
         });
 
-        // timeout: CLI default is 30; treat 30 as "not set" only when file has a value
-        let timeout = if args.timeout != 30 {
-            args.timeout
-        } else {
-            file.scan.timeout.unwrap_or(args.timeout)
-        };
+        // timeout: CLI > file > default 30s
+        let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
 
         // booleans: CLI flag wins if true, otherwise fall back to file
         let json_output = args.json || file.scan.json.unwrap_or(false);
         let verbose = args.verbose || file.scan.verbose.unwrap_or(false);
         let progressive = args.progressive || file.scan.progressive.unwrap_or(false);
 
-        // disabled detectors from file config
+        // disabled detectors: file config base, --no-docker adds to it
         let mut disabled = disabled_from_file(&file.detectors);
-        // --no-docker CLI flag
-        if args.no_docker && !disabled.contains(&"docker".to_string()) {
-            disabled.push("docker".to_string());
+        if args.no_docker {
+            disabled.insert("docker".to_string());
         }
 
         Config {
@@ -133,17 +121,12 @@ impl Config {
             platform::home_dir().map(|h| vec![h]).unwrap_or_default()
         });
 
-        let timeout = if args.timeout != 30 {
-            args.timeout
-        } else {
-            file.scan.timeout.unwrap_or(args.timeout)
-        };
-
+        let timeout = args.timeout.or(file.scan.timeout).unwrap_or(30);
         let verbose = args.verbose || file.scan.verbose.unwrap_or(false);
 
         let mut disabled = disabled_from_file(&file.detectors);
-        if args.no_docker && !disabled.contains(&"docker".to_string()) {
-            disabled.push("docker".to_string());
+        if args.no_docker {
+            disabled.insert("docker".to_string());
         }
 
         Config {
@@ -166,7 +149,7 @@ impl Default for Config {
         Config {
             roots,
             timeout: Duration::from_secs(30),
-            disabled_detectors: Vec::new(),
+            disabled_detectors: HashSet::new(),
             json_output: false,
             verbose: false,
             progressive: false,

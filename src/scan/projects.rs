@@ -17,8 +17,8 @@ impl Detector for ProjectDetector {
         "projects"
     }
 
-    fn available(&self, _config: &Config) -> bool {
-        true
+    fn available(&self, config: &Config) -> bool {
+        config.is_detector_enabled("projects")
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {

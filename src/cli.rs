@@ -40,8 +40,8 @@ pub struct ScanArgs {
     pub no_docker: bool,
 
     /// Per-detector timeout in seconds
-    #[arg(long, default_value_t = 30)]
-    pub timeout: u64,
+    #[arg(long)]
+    pub timeout: Option<u64>,
 
     /// Show detailed output including diagnostics
     #[arg(long, short = 'v', default_value_t = false)]
@@ -106,8 +106,8 @@ pub struct CleanArgs {
     pub no_docker: bool,
 
     /// Per-detector timeout in seconds
-    #[arg(long, default_value_t = 30)]
-    pub timeout: u64,
+    #[arg(long)]
+    pub timeout: Option<u64>,
 
     /// Show detailed output including diagnostics
     #[arg(long, short = 'v', default_value_t = false)]

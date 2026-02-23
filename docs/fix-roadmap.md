@@ -2,7 +2,7 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 15, 2026)
+## Status Summary (Updated: Feb 23, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
@@ -43,6 +43,12 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #81 - clean command safety (--yes/--dry-run conflict, scan config ignored, silent category typos, docker rmi flag injection)
 - ✅ #82 - snapshot connection reuse, FK enforcement, silent error swallowing, module placement
 - ✅ #83 - walkdir descent not pruned, unbounded xcode ancestor walk
+
+**Phase 8: IN PROGRESS**
+- ✅ #22 - Xcode DerivedData detector for macOS (commit 7de9c9b)
+- ✅ #28 - Android AVD/SDK detection (commit 4b6d959)
+- ✅ #21 - config file support (commit b16fc8a)
+- ⬜ #23 - windows support
 
 ---
 
@@ -186,16 +192,25 @@ table output is working. closed Feb 9.
 
 ## phase 8: platform expansion
 
-### [#22](https://github.com/0xSaiNova/heft/issues/22) - xcode detector (macos)
-### [#28](https://github.com/0xSaiNova/heft/issues/28) - android studio detector
-### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support
+### [#22](https://github.com/0xSaiNova/heft/issues/22) - xcode detector (macos) ✅ COMPLETE
+detects Xcode DerivedData directory on macOS, which can grow to tens of gigabytes.
 
-platform specific stuff. independent of each other. do after core features are solid.
+**status: COMPLETE in commit 7de9c9b - added XcodeDetector that walks ~/Library/Developer/Xcode/DerivedData and reports each project's build artifacts. categorized as IdeData.**
+
+### [#28](https://github.com/0xSaiNova/heft/issues/28) - android studio detector ✅ COMPLETE
+detects Android AVD emulator images and SDK cache directories.
+
+**status: COMPLETE in commit 4b6d959 - added Android AVD (~/.android/avd) and SDK cache detection cross-platform. CI workflow added. snapshot/diff/cache tests added.**
+
+### [#21](https://github.com/0xSaiNova/heft/issues/21) - config file support ✅ COMPLETE
+let users customize scan roots and detector settings via `~/.config/heft/config.toml` without passing flags every time.
+
+**status: COMPLETE in commit b16fc8a - reads [scan] and [detectors] sections from TOML config. CLI flags always win over file config. replaced skip_docker: bool with disabled_detectors: Vec<String> so --no-docker and detectors.docker = false both route through the same path. added toml = "0.8" dep.**
+
+### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support
+full Windows path support and testing. independent of other phase 8 items.
 
 ## future work
-
-### [#21](https://github.com/0xSaiNova/heft/issues/21) - config file support (v0.5)
-let users customize scan roots and detector settings via config file.
 
 ### [#24](https://github.com/0xSaiNova/heft/issues/24) - publish to crates.io (v1.0)
 ship it when everything's stable.
