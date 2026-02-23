@@ -29,7 +29,7 @@ fn empty_directory_returns_no_project_entries() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -59,7 +59,7 @@ fn detects_node_modules_in_project() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -97,7 +97,7 @@ fn detects_cargo_target_in_rust_project() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -134,7 +134,7 @@ fn skips_nested_node_modules_in_monorepo() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -167,7 +167,7 @@ fn detects_python_venv() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -200,7 +200,7 @@ fn detects_pytest_cache() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -232,7 +232,7 @@ fn falls_back_to_directory_name_when_manifest_has_no_name() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -264,7 +264,7 @@ fn does_not_detect_target_without_cargo_toml() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -289,7 +289,7 @@ fn scan_runs_without_panic() {
     let config = Config {
         roots: vec![PathBuf::from("/tmp")],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -318,7 +318,7 @@ fn detects_cache_directory() {
     let config = Config {
         roots: vec![temp.clone()],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,
@@ -339,7 +339,7 @@ fn cache_entries_have_correct_category() {
     let config = Config {
         roots: vec![PathBuf::from("/nonexistent")],
         timeout: Duration::from_secs(30),
-        skip_docker: true,
+        disabled_detectors: vec!["docker".to_string()],
         json_output: false,
         verbose: false,
         progressive: false,

@@ -161,7 +161,7 @@ fn create_bench_config(roots: Vec<PathBuf>) -> Config {
     Config {
         roots,
         timeout: std::time::Duration::from_secs(30),
-        skip_docker: true, // Skip docker in benchmarks for consistency
+        disabled_detectors: vec!["docker".to_string()], // Skip docker in benchmarks for consistency
         json_output: false,
         verbose: false,
         progressive: false,
