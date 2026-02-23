@@ -212,20 +212,29 @@ fn detect_artifact(path: &Path, dir_name: &str) -> Option<ArtifactType> {
 }
 
 fn has_dotnet_project(dir: &Path) -> bool {
-    // fast exists() checks — avoids read_dir on every bin/obj dir in the scan
-    dir.join("Directory.Build.props").exists()
+    // fast exists() checks — each is a single stat() call, no directory listing
+    if dir.join("Directory.Build.props").exists()
         || dir.join("global.json").exists()
-        || std::fs::read_dir(dir)
-            .map(|entries| {
-                entries.flatten().any(|e| {
-                    e.path()
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                        .map(|s| matches!(s, "csproj" | "fsproj" | "vbproj" | "sln"))
-                        .unwrap_or(false)
-                })
+        || dir.join("packages.config").exists()
+        || dir.join("NuGet.Config").exists()
+    {
+        return true;
+    }
+
+    // fall back to read_dir to find variable-named project files (*.csproj etc.)
+    // use file_name() directly to avoid allocating a full PathBuf per entry
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let name = e.file_name();
+                let s = name.to_str().unwrap_or("");
+                s.ends_with(".csproj")
+                    || s.ends_with(".fsproj")
+                    || s.ends_with(".vbproj")
+                    || s.ends_with(".sln")
             })
-            .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 fn has_python_project(dir: &Path) -> bool {
