@@ -57,6 +57,7 @@ fn scan_directory(
 
     let walker = WalkDir::new(root)
         .follow_links(false)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|e| !is_hidden(e.file_name()));
 
