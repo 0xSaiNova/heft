@@ -13,6 +13,7 @@ use crate::platform::{self, Platform};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileScanConfig {
     roots: Option<Vec<PathBuf>>,
     timeout: Option<u64>,
@@ -22,6 +23,7 @@ struct FileScanConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileDetectorsConfig {
     docker: Option<bool>,
     xcode: Option<bool>,
@@ -30,6 +32,7 @@ struct FileDetectorsConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileConfig {
     #[serde(default)]
     scan: FileScanConfig,
@@ -182,9 +185,9 @@ impl Config {
             roots,
             timeout: Duration::from_secs(timeout),
             disabled_detectors: disabled,
-            json_output: false,
+            json_output: file.scan.json.unwrap_or(false),
             verbose,
-            progressive: false,
+            progressive: file.scan.progressive.unwrap_or(false),
             platform,
         }
     }
