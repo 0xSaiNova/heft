@@ -2,7 +2,7 @@
 
 tracking the order we're tackling issues and why. this keeps us focused and makes sure we're building the right things in the right order.
 
-## Status Summary (Updated: Feb 15, 2026)
+## Status Summary (Updated: Feb 24, 2026)
 
 **Phase 1: COMPLETE ✅**
 - all detection accuracy bugs fixed
@@ -43,6 +43,27 @@ tracking the order we're tackling issues and why. this keeps us focused and make
 - ✅ #81 - clean command safety (--yes/--dry-run conflict, scan config ignored, silent category typos, docker rmi flag injection)
 - ✅ #82 - snapshot connection reuse, FK enforcement, silent error swallowing, module placement
 - ✅ #83 - walkdir descent not pruned, unbounded xcode ancestor walk
+
+**Phase 8: COMPLETE ✅**
+- ✅ #22 - Xcode DerivedData detector for macOS (commit 7de9c9b)
+- ✅ #28 - Android AVD/SDK detection (commit 4b6d959)
+- ✅ #21 - config file support (commit b16fc8a)
+- ✅ #23 - windows support (WSL2 detection, .NET artifacts, NuGet cache)
+
+**PR #85 review fixes: COMPLETE ✅**
+- ✅ O(n²) seen_artifacts/seen_projects → O(depth) ancestor walk
+- ✅ dead docker_available() removed
+- ✅ config booleans one-directional → added --no-json, --no-verbose, --no-progressive
+- ✅ no CLI flags for non-docker detectors → added --disable (comma-separated)
+- ✅ WSL username bails on multi-user → cmd.exe /c echo %USERNAME% fallback
+- ✅ WSL VHDX reports full size as reclaimable → reclaimable_bytes: 0
+- ✅ wrong diagnostic for disabled detectors → "disabled by config" vs "not available"
+- ✅ has_dotnet_project() read_dir on every bin/obj → fast-path exists() checks + file_name()
+- ✅ global.json false positive → removed (also used by Volta/npm workspaces, not .NET-only)
+- ✅ missing tests → 16 config merge unit tests + 3 .NET false positive integration tests
+- ✅ deny_unknown_fields on file config structs
+- ✅ TempDir in integration tests (cleanup on panic)
+- ✅ from_clean_args reads json/progressive from file config
 
 ---
 
@@ -186,16 +207,27 @@ table output is working. closed Feb 9.
 
 ## phase 8: platform expansion
 
-### [#22](https://github.com/0xSaiNova/heft/issues/22) - xcode detector (macos)
-### [#28](https://github.com/0xSaiNova/heft/issues/28) - android studio detector
-### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support
+### [#22](https://github.com/0xSaiNova/heft/issues/22) - xcode detector (macos) ✅ COMPLETE
+detects Xcode DerivedData directory on macOS, which can grow to tens of gigabytes.
 
-platform specific stuff. independent of each other. do after core features are solid.
+**status: COMPLETE in commit 7de9c9b - added XcodeDetector that walks ~/Library/Developer/Xcode/DerivedData and reports each project's build artifacts. categorized as IdeData.**
+
+### [#28](https://github.com/0xSaiNova/heft/issues/28) - android studio detector ✅ COMPLETE
+detects Android AVD emulator images and SDK cache directories.
+
+**status: COMPLETE in commit 4b6d959 - added Android AVD (~/.android/avd) and SDK cache detection cross-platform. CI workflow added. snapshot/diff/cache tests added.**
+
+### [#21](https://github.com/0xSaiNova/heft/issues/21) - config file support ✅ COMPLETE
+let users customize scan roots and detector settings via `~/.config/heft/config.toml` without passing flags every time.
+
+**status: COMPLETE in commit b16fc8a - reads [scan] and [detectors] sections from TOML config. CLI flags always win over file config. replaced skip_docker: bool with disabled_detectors: Vec<String> so --no-docker and detectors.docker = false both route through the same path. added toml = "0.8" dep.**
+
+### [#23](https://github.com/0xSaiNova/heft/issues/23) - windows support ✅ COMPLETE
+full Windows path support and testing. independent of other phase 8 items.
+
+**status: COMPLETE - is_wsl() uses WSL_INTEROP for true WSL2-only detection. WSL2 virtual disk detection via /mnt/c: Docker Desktop ext4.vhdx (both old and new paths) + all distro vhdx files under AppData/Local/Packages. .NET bin/obj detection with has_dotnet_project() guard (Directory.Build.props/packages.config/NuGet.Config fast path + csproj/fsproj/vbproj/sln scan). NuGet cache (~/.nuget/packages). Fixed gradle cleanup hint. Added .cs/.fs/.vb to source extensions.**
 
 ## future work
-
-### [#21](https://github.com/0xSaiNova/heft/issues/21) - config file support (v0.5)
-let users customize scan roots and detector settings via config file.
 
 ### [#24](https://github.com/0xSaiNova/heft/issues/24) - publish to crates.io (v1.0)
 ship it when everything's stable.

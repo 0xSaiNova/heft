@@ -103,17 +103,33 @@ heft diff --from 1 --to 5   # compare any two
 
 | | |
 |---|---|
-| **project artifacts** | `node_modules`, `target`, `.venv`, gradle/maven builds, Xcode DerivedData |
-| **package caches** | npm, yarn, pnpm, pip, cargo, homebrew, go modules, maven, gradle |
-| **docker** | images, containers, volumes, build cache, Desktop VM disk files |
-| **IDE data** | VSCode extensions and caches |
+| **project artifacts** | `node_modules`, `target`, `.venv`, `bin`/`obj` (.NET), gradle/maven builds, Xcode DerivedData |
+| **package caches** | npm, yarn, pnpm, pip, cargo, homebrew, go modules, maven, gradle, NuGet |
+| **docker** | images, containers, volumes, build cache, Desktop VM disk files, WSL2 virtual disks |
+| **IDE data** | VSCode, Android AVD emulator images, Android SDK |
+
+## config file
+
+persistent settings in `~/.config/heft/config.toml` — CLI flags always override:
+
+```toml
+[scan]
+roots = ["/home/you/code"]
+timeout = 60
+verbose = true
+
+[detectors]
+docker = false   # skip docker entirely
+xcode = false    # skip xcode on this machine
+```
 
 ## scripting
 
 ```bash
 heft scan --json | jq '.entries[] | select(.size_bytes > 1073741824)'
-heft scan --progressive    # stream results as each detector finishes
-heft scan --verbose        # show per-detector timing and diagnostics
+heft scan --progressive          # stream results as each detector finishes
+heft scan --verbose              # show per-detector timing and diagnostics
+heft scan --disable docker,xcode # skip specific detectors for one run
 ```
 
 ## safety

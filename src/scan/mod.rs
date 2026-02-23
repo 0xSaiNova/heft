@@ -1,7 +1,7 @@
-pub mod detector;
-pub mod projects;
 pub mod caches;
+pub mod detector;
 pub mod docker;
+pub mod projects;
 pub mod xcode;
 
 use std::path::Path;
@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 
 use crate::config::Config;
 use crate::util::format_bytes;
-use detector::{Detector, DetectorResult, BloatEntry};
+use detector::{BloatEntry, Detector, DetectorResult};
 
 #[derive(Serialize)]
 pub struct ScanResult {
@@ -72,7 +72,15 @@ pub fn run(config: &Config) -> ScanResult {
     for detector in detectors {
         let detector_name = detector.name();
 
-        // Skip unavailable detectors
+        // Skip disabled or unavailable detectors
+        if !config.is_detector_enabled(detector_name) {
+            let msg = format!("{detector_name}: skipped (disabled by config)");
+            if config.progressive {
+                eprintln!("{msg}");
+            }
+            scan_result.diagnostics.push(msg);
+            continue;
+        }
         if !detector.available(config) {
             let msg = format!("{detector_name}: skipped (not available on this platform)");
             if config.progressive {
@@ -102,7 +110,9 @@ pub fn run(config: &Config) -> ScanResult {
         let detector_duration = detector_start.elapsed();
 
         // Store timing (always available)
-        scan_result.detector_timings.push((detector_name.to_string(), detector_duration.as_millis()));
+        scan_result
+            .detector_timings
+            .push((detector_name.to_string(), detector_duration.as_millis()));
 
         // Sample memory AFTER detector completes (if tracking enabled)
         if peak_memory.is_some() {
@@ -120,7 +130,9 @@ pub fn run(config: &Config) -> ScanResult {
                 peak_memory = Some(current_peak.max(memory_after));
             }
 
-            scan_result.detector_memory.push((detector_name.to_string(), memory_delta));
+            scan_result
+                .detector_memory
+                .push((detector_name.to_string(), memory_delta));
         }
 
         // Show completion message in progressive mode
@@ -171,18 +183,25 @@ pub(crate) fn calculate_dir_size(path: &Path) -> Result<(u64, Vec<String>), std:
                             }
                         }
                         Err(e) => {
-                            warnings.push(format!("failed to read metadata for {}: {}",
-                                entry.path().display(), e));
+                            warnings.push(format!(
+                                "failed to read metadata for {}: {}",
+                                entry.path().display(),
+                                e
+                            ));
                         }
                     }
                 }
             }
             Err(e) => {
-                let path_str = e.path()
+                let path_str = e
+                    .path()
                     .map(|p| p.display().to_string())
                     .unwrap_or_else(|| "unknown path".to_string());
 
-                if e.io_error().map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied).unwrap_or(false) {
+                if e.io_error()
+                    .map(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied)
+                    .unwrap_or(false)
+                {
                     warnings.push(format!("permission denied: {path_str}"));
                 } else if e.loop_ancestor().is_some() {
                     warnings.push(format!("symlink loop detected: {path_str}"));

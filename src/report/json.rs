@@ -9,8 +9,7 @@ pub fn render(result: &ScanResult) -> String {
         let error_obj = serde_json::json!({
             "error": format!("failed to serialize: {}", e)
         });
-        serde_json::to_string_pretty(&error_obj).unwrap_or_else(|_|
-            r#"{"error": "catastrophic serialization failure"}"#.to_string()
-        )
+        serde_json::to_string_pretty(&error_obj)
+            .unwrap_or_else(|_| r#"{"error": "catastrophic serialization failure"}"#.to_string())
     })
 }

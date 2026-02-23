@@ -5,10 +5,10 @@
 //! - Shows per-category totals and grand total
 //! - Sorts by reclaimable size descending
 
-use std::collections::HashMap;
-use crate::scan::ScanResult;
 use crate::scan::detector::BloatCategory;
+use crate::scan::ScanResult;
 use crate::util::format_bytes;
+use std::collections::HashMap;
 
 pub fn render(result: &ScanResult) -> String {
     if result.entries.is_empty() {
@@ -26,9 +26,7 @@ pub fn render(result: &ScanResult) -> String {
     // sort categories by total size (largest first)
     let mut categories: Vec<_> = by_category.keys().copied().collect();
     categories.sort_by_key(|cat| {
-        std::cmp::Reverse(
-            by_category[cat].iter().map(|e| e.size_bytes).sum::<u64>()
-        )
+        std::cmp::Reverse(by_category[cat].iter().map(|e| e.size_bytes).sum::<u64>())
     });
 
     let mut grand_total: u64 = 0;
@@ -61,7 +59,10 @@ pub fn render(result: &ScanResult) -> String {
         ));
     }
 
-    output.push_str(&format!("\n{:>42}\n", format!("TOTAL: {}", format_bytes(grand_total))));
+    output.push_str(&format!(
+        "\n{:>42}\n",
+        format!("TOTAL: {}", format_bytes(grand_total))
+    ));
 
     output
 }

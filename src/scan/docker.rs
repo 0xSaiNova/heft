@@ -17,15 +17,15 @@
 //!
 //! Does not walk Docker's internal storage directories directly.
 
+use serde::Deserialize;
+use std::fs;
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use std::fs;
-use serde::Deserialize;
 
+use super::detector::{BloatCategory, BloatEntry, Detector, DetectorResult, Location};
 use crate::config::Config;
 use crate::platform;
-use super::detector::{Detector, DetectorResult, BloatEntry, BloatCategory, Location};
 
 pub struct DockerDetector;
 
@@ -43,8 +43,8 @@ impl Detector for DockerDetector {
         "docker"
     }
 
-    fn available(&self, config: &Config) -> bool {
-        !config.skip_docker
+    fn available(&self, _config: &Config) -> bool {
+        true
     }
 
     fn scan(&self, config: &Config) -> DetectorResult {
@@ -114,12 +114,15 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
 
         // check for common error patterns
         if stderr.contains("Cannot connect to the Docker daemon")
-            || stderr.contains("Is the docker daemon running") {
+            || stderr.contains("Is the docker daemon running")
+        {
             return Err("docker: daemon not running (start Docker Desktop or dockerd)".to_string());
         }
 
         if stderr.contains("permission denied") || stderr.contains("EACCES") {
-            return Err("docker: permission denied (add user to docker group or run with sudo)".to_string());
+            return Err(
+                "docker: permission denied (add user to docker group or run with sudo)".to_string(),
+            );
         }
 
         return Err(format!("docker: command failed: {}", stderr.trim()));
@@ -205,7 +208,8 @@ fn parse_docker_size(size_str: &str) -> Result<u64, String> {
     let num_str = &size_part[..num_end];
     let unit = size_part[num_end..].trim();
 
-    let num: f64 = num_str.parse()
+    let num: f64 = num_str
+        .parse()
         .map_err(|_| format!("docker: invalid number in size: {size_str}"))?;
 
     let multiplier: u64 = match unit {
@@ -236,28 +240,30 @@ fn get_cleanup_hint(type_: &str) -> String {
 
 /// Detect Docker Desktop VM disk image on macOS and Windows.
 ///
-/// NOTE: macOS and Windows detection paths are UNTESTED on actual hardware.
-/// Paths are based on Docker Desktop documentation. If you're running this on
-/// macOS or Windows and encounter issues, please report at:
-/// https://github.com/0xSaiNova/heft/issues/42
-///
 /// These VM disk images can be 30-60 GB and don't automatically shrink when
-/// you delete containers/images inside the VM.
+/// you delete containers or images inside the VM. `docker system prune` frees
+/// space inside the VM but the host file doesn't compact unless you take
+/// explicit action.
+///
+/// NOTE: Windows path is based on Docker Desktop WSL2 documentation and has
+/// not been tested on real hardware. Report issues at:
+/// https://github.com/0xSaiNova/heft/issues/42
 fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
     // only macOS and Windows use VM disk images for Docker Desktop
     let (vm_path, cleanup_hint) = match config.platform {
         platform::Platform::MacOS => {
-            // UNTESTED: This path is based on Docker Desktop documentation
             let home = platform::home_dir()?;
             let path = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
-            let hint = "Docker Desktop VM disk. To reclaim space: Docker Desktop → Settings → Resources → Disk image size → 'Clean/Purge data'. Or run 'docker system prune' and restart Docker Desktop.".to_string();
+            // docker system prune frees space inside the VM but Docker.raw won't
+            // shrink on disk — you need to purge via Docker Desktop settings
+            let hint = "Docker Desktop VM disk (doesn't auto-compact). Shrink it: Docker Desktop → Settings → Resources → Advanced → Disk image size → 'Clean/Purge data'. Then restart Docker Desktop.".to_string();
             (path, hint)
         }
         platform::Platform::Windows => {
-            // UNTESTED: This path is based on Docker Desktop WSL2 documentation
+            // NOTE: UNTESTED on real Windows hardware
             let home = platform::home_dir()?;
             let path = home.join("AppData/Local/Docker/wsl/data/ext4.vhdx");
-            let hint = "Docker Desktop VM disk. To reclaim space: run 'wsl --shutdown' then 'Optimize-VHD -Path $path -Mode Full' in PowerShell (admin).".to_string();
+            let hint = "Docker Desktop VM disk (doesn't auto-compact). Shrink it: run 'wsl --shutdown' then 'Optimize-VHD -Path <path> -Mode Full' in PowerShell (admin).".to_string();
             (path, hint)
         }
         _ => return None, // Linux doesn't use VM disk images
@@ -291,11 +297,11 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
 
     Some(BloatEntry {
         category: BloatCategory::ContainerData,
-        name: format!("Docker Desktop VM ({})", vm_path.display()),
+        name: "Docker Desktop VM disk".to_string(),
         location: Location::FilesystemPath(vm_path),
         size_bytes,
         reclaimable_bytes: 0, // we can't determine reclaimable size without analyzing the VM
-        last_modified: None, // timestamp not needed for VM disk
+        last_modified: None,  // timestamp not needed for VM disk
         cleanup_hint: Some(cleanup_hint),
     })
 }

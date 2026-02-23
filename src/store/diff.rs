@@ -5,10 +5,10 @@
 //! - Shows per-category deltas: grew, shrank, new, gone
 //! - Net change summary
 
-use crate::scan::detector::{BloatEntry, BloatCategory};
+use crate::scan::detector::{BloatCategory, BloatEntry};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DiffType {
     Grew,
     Shrank,
@@ -132,5 +132,112 @@ pub fn compare_entries(
         to_id,
         from_timestamp,
         to_timestamp,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scan::detector::{BloatCategory, BloatEntry, Location};
+    use std::path::PathBuf;
+
+    fn entry(name: &str, size: u64) -> BloatEntry {
+        BloatEntry {
+            category: BloatCategory::PackageCache,
+            name: name.to_string(),
+            location: Location::FilesystemPath(PathBuf::from("/tmp")),
+            size_bytes: size,
+            reclaimable_bytes: size,
+            last_modified: None,
+            cleanup_hint: None,
+        }
+    }
+
+    fn diff(from: &[BloatEntry], to: &[BloatEntry]) -> DiffResult {
+        compare_entries(from, to, 1, 2, 0, 100)
+    }
+
+    #[test]
+    fn new_entry_detected() {
+        let result = diff(&[], &[entry("npm cache", 1_000_000)]);
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].diff_type, DiffType::New);
+        assert_eq!(result.entries[0].new_size, 1_000_000);
+        assert_eq!(result.net_change, 1_000_000);
+    }
+
+    #[test]
+    fn gone_entry_detected() {
+        let result = diff(&[entry("npm cache", 1_000_000)], &[]);
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].diff_type, DiffType::Gone);
+        assert_eq!(result.entries[0].old_size, 1_000_000);
+        assert_eq!(result.entries[0].new_size, 0);
+        assert_eq!(result.net_change, -1_000_000);
+    }
+
+    #[test]
+    fn grew_entry_detected() {
+        let result = diff(
+            &[entry("npm cache", 1_000_000)],
+            &[entry("npm cache", 2_000_000)],
+        );
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].diff_type, DiffType::Grew);
+        assert_eq!(result.entries[0].delta, 1_000_000);
+        assert_eq!(result.net_change, 1_000_000);
+    }
+
+    #[test]
+    fn shrank_entry_detected() {
+        let result = diff(
+            &[entry("cargo registry", 3_000_000)],
+            &[entry("cargo registry", 1_000_000)],
+        );
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].diff_type, DiffType::Shrank);
+        assert_eq!(result.entries[0].delta, -2_000_000);
+        assert_eq!(result.net_change, -2_000_000);
+    }
+
+    #[test]
+    fn unchanged_entry_not_reported() {
+        let result = diff(
+            &[entry("npm cache", 1_000_000)],
+            &[entry("npm cache", 1_000_000)],
+        );
+        assert!(result.entries.is_empty());
+        assert_eq!(result.net_change, 0);
+    }
+
+    #[test]
+    fn net_change_mixed_operations() {
+        let from = vec![entry("a", 1_000_000), entry("b", 2_000_000)];
+        // a grew +500k, b is gone -2M, c is new +500k → net -1M
+        let to = vec![entry("a", 1_500_000), entry("c", 500_000)];
+
+        let result = diff(&from, &to);
+        assert_eq!(result.net_change, -1_000_000);
+
+        let types: Vec<&DiffType> = result.entries.iter().map(|e| &e.diff_type).collect();
+        assert!(types.contains(&&DiffType::Grew));
+        assert!(types.contains(&&DiffType::Gone));
+        assert!(types.contains(&&DiffType::New));
+    }
+
+    #[test]
+    fn empty_both_sides_no_entries() {
+        let result = diff(&[], &[]);
+        assert!(result.entries.is_empty());
+        assert_eq!(result.net_change, 0);
+    }
+
+    #[test]
+    fn snapshot_ids_preserved() {
+        let result = compare_entries(&[], &[], 7, 13, 1000, 2000);
+        assert_eq!(result.from_id, 7);
+        assert_eq!(result.to_id, 13);
+        assert_eq!(result.from_timestamp, 1000);
+        assert_eq!(result.to_timestamp, 2000);
     }
 }
