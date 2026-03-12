@@ -18,13 +18,12 @@ pub fn print(result: &ScanResult, config: &Config) {
 fn print_scan_info(result: &ScanResult, verbose: bool) {
     if let Some(duration_ms) = result.duration_ms {
         let duration_sec = duration_ms as f64 / 1000.0;
-        println!("\nscan completed in {duration_sec:.2}s");
 
-        // Display peak memory in verbose mode or JSON (always tracked)
-        if verbose {
-            if let Some(peak_bytes) = result.peak_memory_bytes {
-                println!("peak memory: {}", format_bytes(peak_bytes as u64));
-            }
+        if let Some(peak_bytes) = result.peak_memory_bytes {
+            let peak_mb = peak_bytes as f64 / 1_024_f64 / 1_024_f64;
+            println!("\nScan completed in {duration_sec:.2}s (peak memory: {peak_mb:.1} MB)");
+        } else {
+            println!("\nScan completed in {duration_sec:.2}s");
         }
 
         // Display per-detector metrics in verbose mode

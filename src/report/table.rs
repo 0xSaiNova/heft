@@ -29,12 +29,18 @@ pub fn render(result: &ScanResult) -> String {
         std::cmp::Reverse(by_category[cat].iter().map(|e| e.size_bytes).sum::<u64>())
     });
 
-    let mut grand_total: u64 = 0;
+    let mut grand_found: u64 = 0;
+    let mut grand_reclaimable: u64 = 0;
 
     for category in categories {
         let entries = &by_category[&category];
         let category_total: u64 = entries.iter().map(|e| e.size_bytes).sum();
-        grand_total += category_total;
+        grand_found += entries
+            .iter()
+            .filter(|e| e.reclaimable_bytes > 0)
+            .map(|e| e.size_bytes)
+            .sum::<u64>();
+        grand_reclaimable += entries.iter().map(|e| e.reclaimable_bytes).sum::<u64>();
 
         output.push_str(&format!("\n{category:?}\n"));
         output.push_str(&"-".repeat(40));
@@ -60,8 +66,9 @@ pub fn render(result: &ScanResult) -> String {
     }
 
     output.push_str(&format!(
-        "\n{:>42}\n",
-        format!("TOTAL: {}", format_bytes(grand_total))
+        "\nTotal: {} found, {} reclaimable\n",
+        format_bytes(grand_found),
+        format_bytes(grand_reclaimable),
     ));
 
     output
