@@ -416,6 +416,9 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Ok(None);
         }
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            return Ok(None);
+        }
         Err(e) => {
             return Err(format!("failed to spawn brew command: {e}"));
         }
