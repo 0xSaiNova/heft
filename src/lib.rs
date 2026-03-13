@@ -4,5 +4,6 @@ pub mod config;
 pub mod platform;
 pub mod report;
 pub mod scan;
+pub mod spinner;
 pub mod store;
 pub mod util;

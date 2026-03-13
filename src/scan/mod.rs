@@ -10,6 +10,7 @@ use serde::Serialize;
 use walkdir::WalkDir;
 
 use crate::config::Config;
+use crate::spinner::Spinner;
 use crate::util::format_bytes;
 use detector::{BloatEntry, Detector, DetectorResult};
 
@@ -69,6 +70,14 @@ pub fn run(config: &Config) -> ScanResult {
         peak_memory = Some(usage.physical_mem);
     }
 
+    // Show a spinner when running interactively without progressive output
+    let use_spinner = !config.progressive && !config.json_output;
+    let spinner = if use_spinner {
+        Spinner::start("Scanning...")
+    } else {
+        None
+    };
+
     for detector in detectors {
         let detector_name = detector.name();
 
@@ -93,6 +102,11 @@ pub fn run(config: &Config) -> ScanResult {
         // Show start message in progressive mode
         if config.progressive {
             eprintln!("Scanning {detector_name}...");
+        }
+
+        // Update spinner with current detector
+        if let Some(ref sp) = spinner {
+            sp.set_message(&format!("Scanning {detector_name}..."));
         }
 
         // Sample memory BEFORE detector runs (if tracking enabled)
@@ -149,6 +163,11 @@ pub fn run(config: &Config) -> ScanResult {
         }
 
         scan_result.merge(result);
+    }
+
+    // Stop spinner before printing results
+    if let Some(sp) = spinner {
+        sp.stop();
     }
 
     scan_result.duration_ms = Some(start.elapsed().as_millis());
