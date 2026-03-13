@@ -6,6 +6,7 @@ use std::time::Duration;
 
 const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL: Duration = Duration::from_millis(80);
+const POLL_STEP: Duration = Duration::from_millis(10);
 
 pub struct Spinner {
     running: Arc<AtomicBool>,
@@ -14,9 +15,8 @@ pub struct Spinner {
 }
 
 impl Spinner {
-    /// Start a spinner on stderr. Returns None if stderr is not a terminal.
     pub fn start(msg: &str) -> Option<Self> {
-        if !atty_stderr() {
+        if !should_show_spinner() {
             return None;
         }
 
@@ -29,15 +29,21 @@ impl Spinner {
         let handle = thread::spawn(move || {
             let mut frame = 0;
             let mut stderr = io::stderr();
-            while r.load(Ordering::Relaxed) {
-                let msg = m.lock().unwrap().clone();
-                let _ = write!(stderr, "\r\x1b[2K{} {}", FRAMES[frame], msg);
+            while r.load(Ordering::Acquire) {
+                let msg = m.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                let _ = write!(stderr, "\x1b[2K\r{} {}", FRAMES[frame], msg);
                 let _ = stderr.flush();
                 frame = (frame + 1) % FRAMES.len();
-                thread::sleep(INTERVAL);
+
+                // poll in short steps so stop() doesn't block the full 80ms
+                for _ in 0..(INTERVAL.as_millis() / POLL_STEP.as_millis()) {
+                    if !r.load(Ordering::Acquire) {
+                        break;
+                    }
+                    thread::sleep(POLL_STEP);
+                }
             }
-            // Clear the spinner line
-            let _ = write!(stderr, "\r\x1b[2K");
+            let _ = write!(stderr, "\x1b[2K\r");
             let _ = stderr.flush();
         });
 
@@ -48,49 +54,78 @@ impl Spinner {
         })
     }
 
-    /// Update the spinner message.
     pub fn set_message(&self, msg: &str) {
-        *self.message.lock().unwrap() = msg.to_string();
+        if let Ok(mut guard) = self.message.lock() {
+            *guard = msg.to_string();
+        }
     }
 
-    /// Stop the spinner and clear the line.
     pub fn stop(mut self) {
-        self.running.store(false, Ordering::Relaxed);
+        self.shutdown();
+    }
+
+    fn shutdown(&mut self) {
+        self.running.store(false, Ordering::Release);
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            if handle.join().is_err() {
+                let _ = write!(io::stderr(), "\x1b[2K\r");
+                let _ = io::stderr().flush();
+            }
         }
     }
 }
 
 impl Drop for Spinner {
     fn drop(&mut self) {
-        self.running.store(false, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
+        self.shutdown();
     }
 }
 
-fn atty_stderr() -> bool {
-    unsafe { libc_isatty(2) != 0 }
+fn should_show_spinner() -> bool {
+    if !is_stderr_tty() {
+        return false;
+    }
+
+    // respect NO_COLOR convention (https://no-color.org)
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+
+    // dumb terminals don't support ANSI escapes
+    if std::env::var("TERM").ok().as_deref() == Some("dumb") {
+        return false;
+    }
+
+    // most CI systems set this; spinner is noise in log output
+    if std::env::var_os("CI").is_some() {
+        return false;
+    }
+
+    true
 }
 
-// Inline libc isatty check to avoid adding a dependency.
+// inline libc isatty check to avoid adding a dependency
 #[cfg(unix)]
 extern "C" {
     fn isatty(fd: std::os::raw::c_int) -> std::os::raw::c_int;
 }
 
 #[cfg(unix)]
-unsafe fn libc_isatty(fd: std::os::raw::c_int) -> std::os::raw::c_int {
-    unsafe { isatty(fd) }
+fn is_stderr_tty() -> bool {
+    // SAFETY: isatty is a read only query on a valid fd, no UB possible
+    unsafe { isatty(2) != 0 }
 }
 
 #[cfg(windows)]
-unsafe fn libc_isatty(fd: std::os::raw::c_int) -> std::os::raw::c_int {
-    // On Windows, _isatty is in the CRT
+fn is_stderr_tty() -> bool {
     extern "C" {
         fn _isatty(fd: std::os::raw::c_int) -> std::os::raw::c_int;
     }
-    unsafe { _isatty(fd) }
+    // SAFETY: _isatty is a read only query on a valid fd
+    unsafe { _isatty(2) != 0 }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn is_stderr_tty() -> bool {
+    false
 }
