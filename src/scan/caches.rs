@@ -419,8 +419,13 @@ fn get_homebrew_cache(timeout: Duration) -> Result<Option<PathBuf>, String> {
     use std::io::Read;
     use std::process::Stdio;
 
+    // brew --cache should return instantly with auto-update disabled.
+    // cap at 5 seconds even if the caller passes a longer timeout.
+    let timeout = timeout.min(Duration::from_secs(5));
+
     let mut child = match Command::new("brew")
         .arg("--cache")
+        .env("HOMEBREW_NO_AUTO_UPDATE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

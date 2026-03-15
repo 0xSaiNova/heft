@@ -55,11 +55,14 @@ fn scan_directory(
     // for more artifacts. this set tracks what weve already claimed.
     let mut seen_artifacts: HashSet<PathBuf> = HashSet::new();
 
+    let home = crate::platform::home_dir();
     let walker = WalkDir::new(root)
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|e| !is_hidden(e.file_name()));
+        .filter_entry(move |e| {
+            !is_hidden(e.file_name()) && !is_skippable_tree(e.path(), home.as_deref())
+        });
 
     for entry in walker.filter_map(|e| e.ok()) {
         if !entry.file_type().is_dir() {
@@ -337,6 +340,60 @@ fn is_hidden(name: &std::ffi::OsStr) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+// directories that are deep trees but never contain build artifacts like
+// node_modules or target/. walking these wastes time on macOS especially,
+// where ~/Library alone has millions of files.
+fn is_skippable_tree(path: &Path, home: Option<&Path>) -> bool {
+    let home = match home {
+        Some(h) => h,
+        None => return false,
+    };
+
+    // only skip when the path is directly under home — avoids accidentally
+    // skipping legitimate project dirs that happen to share a name.
+    let relative = match path.strip_prefix(home) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    // convert to a unix-style string for matching. on windows this still
+    // works because strip_prefix already removed the prefix and Path
+    // components iterate correctly.
+    let components: Vec<&str> = relative
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+
+    match components.as_slice() {
+        // macOS deep trees that never contain build artifacts
+        ["Library", "Application Support", ..] => true,
+        ["Library", "Containers", ..] => true,
+        ["Library", "Group Containers", ..] => true,
+        ["Library", "Mail", ..] => true,
+        ["Library", "Messages", ..] => true,
+        ["Library", "Caches", ..] => true,
+        ["Library", "Logs", ..] => true,
+        ["Library", "Saved Application State", ..] => true,
+
+        // photo and music libraries are single massive bundles
+        [name, ..] if name.ends_with(".photoslibrary") => true,
+        ["Music", "Music", ..] => true,
+        ["Movies", ..] => true,
+        ["Pictures", ..] => true,
+
+        // trash on macOS and linux
+        [".Trash", ..] => true,
+        [".local", "share", "Trash", ..] => true,
+
+        // linux system directories that show up when scanning /home
+        [".cache", ..] => true,
+        [".local", "share", "Steam", ..] => true,
+        [".local", "share", "containers", ..] => true,
+
+        _ => false,
+    }
 }
 
 fn determine_project_name(project_root: &Path, artifact: &ArtifactType) -> String {

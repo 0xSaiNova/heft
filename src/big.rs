@@ -12,8 +12,52 @@ pub struct BigFile {
 
 const SKIP_PATHS: &[&str] = &["/proc", "/sys", "/dev", "/run"];
 
+// directories that are deep trees but will never contain user-manageable
+// large files worth surfacing. same rationale as projects::is_skippable_tree
+// but checked as path prefixes since jwalk doesn't support filter_entry.
+fn should_skip_dir(path: &Path, home: Option<&Path>) -> bool {
+    if SKIP_PATHS.iter().any(|p| path.starts_with(p)) {
+        return true;
+    }
+
+    let home = match home {
+        Some(h) => h,
+        None => return false,
+    };
+
+    let relative = match path.strip_prefix(home) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    let components: Vec<&str> = relative
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+
+    match components.as_slice() {
+        ["Library", "Application Support", ..] => true,
+        ["Library", "Containers", ..] => true,
+        ["Library", "Group Containers", ..] => true,
+        ["Library", "Mail", ..] => true,
+        ["Library", "Messages", ..] => true,
+        ["Library", "Caches", ..] => true,
+        ["Library", "Logs", ..] => true,
+        ["Library", "Saved Application State", ..] => true,
+        [name, ..] if name.ends_with(".photoslibrary") => true,
+        ["Music", "Music", ..] => true,
+        [".Trash", ..] => true,
+        [".local", "share", "Trash", ..] => true,
+        [".cache", ..] => true,
+        [".local", "share", "Steam", ..] => true,
+        [".local", "share", "containers", ..] => true,
+        _ => false,
+    }
+}
+
 pub fn find_big_files(roots: &[PathBuf], min_bytes: u64) -> Vec<BigFile> {
     let mut results = Vec::new();
+    let home = crate::platform::home_dir();
     for root in roots {
         let root_dev = get_device_id(root);
         for entry in jwalk::WalkDir::new(root)
@@ -23,7 +67,7 @@ pub fn find_big_files(roots: &[PathBuf], min_bytes: u64) -> Vec<BigFile> {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if SKIP_PATHS.iter().any(|p| path.starts_with(p)) {
+            if should_skip_dir(&path, home.as_deref()) {
                 continue;
             }
             let metadata = match entry.metadata() {
