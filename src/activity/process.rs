@@ -28,6 +28,10 @@ pub fn active_roots(roots: &[PathBuf]) -> HashMap<PathBuf, String> {
 
     #[cfg(not(target_os = "linux"))]
     {
+        // macos: proc_pidinfo doesn't straightforwardly expose cwd.
+        // windows: requires NtQueryInformationProcess or WMI.
+        // both deferred. returns empty so process signal is skipped,
+        // but git and mtime signals still work on all platforms.
         let _ = roots;
         HashMap::new()
     }

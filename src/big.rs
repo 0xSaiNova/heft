@@ -95,5 +95,8 @@ fn get_device_id(path: &Path) -> Option<u64> {
 
 #[cfg(not(unix))]
 fn get_device_id(_path: &Path) -> Option<u64> {
+    // windows: mount boundary filtering not supported. all drives will
+    // be walked, which is acceptable because windows users typically
+    // specify --root per-drive rather than scanning /.
     None
 }
