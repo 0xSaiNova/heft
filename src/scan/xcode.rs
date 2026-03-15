@@ -61,6 +61,7 @@ impl Detector for XcodeDetector {
                         active: None,
                         active_reason: None,
                         staleness_score: None,
+                        safety: None,
                     }],
                     diagnostics,
                 }

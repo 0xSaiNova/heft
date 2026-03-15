@@ -179,6 +179,7 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
             active: None,
             active_reason: None,
             staleness_score: None,
+            safety: None,
         });
     }
 
@@ -309,6 +310,7 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
         active: None,
         active_reason: None,
         staleness_score: None,
+        safety: None,
     })
 }
 

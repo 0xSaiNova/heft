@@ -106,6 +106,7 @@ fn scan_directory(
                         active: None,
                         active_reason: None,
                         staleness_score: None,
+                        safety: None,
                     });
 
                     seen_projects.insert(project_root.to_path_buf());

@@ -62,6 +62,8 @@ pub struct BloatEntry {
     pub active_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staleness_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety: Option<crate::safety::SafetyInfo>,
 }
 
 /// Source file extensions used for activity detection and last-modified scanning.

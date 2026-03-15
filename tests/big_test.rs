@@ -130,6 +130,7 @@ fn dedup_removes_files_under_detector_paths() {
         active: None,
         active_reason: None,
         staleness_score: None,
+        safety: None,
     }];
 
     big::dedup_big_files(&mut big_files, &detector_entries);
@@ -161,6 +162,7 @@ fn dedup_handles_docker_locations() {
         active: None,
         active_reason: None,
         staleness_score: None,
+        safety: None,
     }];
 
     // should not panic on DockerObject locations

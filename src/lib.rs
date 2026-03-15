@@ -9,6 +9,7 @@ pub mod default;
 pub mod picker;
 pub mod platform;
 pub mod report;
+pub mod safety;
 pub mod scan;
 pub mod spinner;
 pub mod staleness;

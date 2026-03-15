@@ -253,6 +253,7 @@ impl Store {
                     active: row.get::<_, Option<bool>>(7)?,
                     active_reason: row.get(8)?,
                     staleness_score: row.get::<_, Option<f64>>(9)?,
+                    safety: None,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -349,6 +350,7 @@ mod tests {
             active: None,
             active_reason: None,
             staleness_score: None,
+            safety: None,
         }
     }
 

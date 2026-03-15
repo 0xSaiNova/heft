@@ -61,6 +61,7 @@ impl Detector for CacheDetector {
                         active: None,
                         active_reason: None,
                         staleness_score: None,
+                        safety: None,
                     });
 
                     for warning in warnings {

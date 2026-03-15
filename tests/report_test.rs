@@ -15,6 +15,7 @@ fn test_entry(name: &str, category: BloatCategory, size: u64) -> BloatEntry {
         active: None,
         active_reason: None,
         staleness_score: Some(100.0),
+        safety: None,
     }
 }
 

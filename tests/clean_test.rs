@@ -21,6 +21,7 @@ fn entry_at(path: PathBuf, active: Option<bool>, staleness: Option<f64>) -> Bloa
             None
         },
         staleness_score: staleness,
+        safety: None,
     }
 }
 

@@ -216,6 +216,7 @@ fn check_dev_artifact_activity(
             active: None,
             active_reason: None,
             staleness_score: None,
+            safety: None,
         })
         .collect();
 

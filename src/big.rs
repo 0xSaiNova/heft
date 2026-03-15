@@ -84,6 +84,7 @@ pub fn big_file_to_entry(bf: BigFile) -> BloatEntry {
         active: None,
         active_reason: None,
         staleness_score: None,
+        safety: None,
     }
 }
 
