@@ -64,15 +64,22 @@ pub fn run_picker(
     };
 
     // truncate a string to fit within the terminal width so wrapped lines
-    // never push the draw area past the reserved row count.
+    // never push the draw area past the reserved row count. slices at a
+    // char boundary to avoid panicking on multi-byte UTF-8 paths.
     let truncate = |s: &str, width: usize| -> String {
         if s.len() <= width {
-            s.to_string()
-        } else {
-            let mut t = s[..width.saturating_sub(1)].to_string();
-            t.push('…');
-            t
+            return s.to_string();
         }
+        let limit = width.saturating_sub(1);
+        let end = s
+            .char_indices()
+            .take_while(|(i, _)| *i < limit)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        let mut t = s[..end].to_string();
+        t.push('…');
+        t
     };
 
     let draw = |sel: &[bool],

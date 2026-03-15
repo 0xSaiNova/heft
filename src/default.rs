@@ -25,7 +25,16 @@ pub fn run_default(cli: &Cli, config: Config) {
     // find big files outside detector coverage
     let mut big_files = big::find_big_files(&config.roots, min_bytes);
     big::dedup_big_files(&mut big_files, &result.entries);
-    let new_entries: Vec<_> = big_files.into_iter().map(big::big_file_to_entry).collect();
+    let mut new_entries: Vec<_> = big_files.into_iter().map(big::big_file_to_entry).collect();
+
+    // check activity on big files so they get proper active protection.
+    // without this, big files inside active projects would have active: None
+    // and should_preselect couldn't protect them.
+    let activity_results = crate::activity::check(&new_entries, &config.activity);
+    for (i, ar) in activity_results.into_iter().enumerate() {
+        new_entries[i].active = Some(ar.active);
+        new_entries[i].active_reason = ar.reason;
+    }
 
     // compute staleness only for the new big file entries
     let now = std::time::SystemTime::now()

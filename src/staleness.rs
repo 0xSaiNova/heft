@@ -75,8 +75,10 @@ mod tests {
     }
 
     #[test]
-    fn very_old_uses_default_factor() {
-        // default_factor applies when age exceeds all brackets
+    fn below_all_brackets_uses_default_factor() {
+        // when age is below every bracket, no bracket matches via the
+        // reverse search, so default_factor applies as the fallback.
+        // with only a 7 day bracket, a 3 day old item has no match.
         let cfg = StalenessConfig {
             brackets: vec![StalenessBracket {
                 days: 7,
@@ -85,7 +87,6 @@ mod tests {
             default_factor: 5.0,
         };
         let now = 100_000_000;
-        // 3 days old, below the 7 day bracket, no match, default_factor fires
         let score = compute_staleness(100, Some(now - 3 * DAY), now, &cfg);
         assert_eq!(score, 500.0);
     }

@@ -178,7 +178,9 @@ fn main() {
                 }
             }
 
-            if args.sort == SortOrder::Staleness {
+            if config.json_output {
+                println!("{}", report::json::render(&result));
+            } else if args.sort == SortOrder::Staleness {
                 // flat staleness ranked output (table renderer would re-group by category)
                 heft::summary::print_summary(&result.entries);
             } else {

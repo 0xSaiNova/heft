@@ -1,7 +1,7 @@
 //! Snapshot comparison engine.
 //!
 //! Compares two snapshots and reports changes:
-//! - Matches entries by category and project name (not exact path)
+//! - Matches entries by category, name, and location path
 //! - Shows per-category deltas: grew, shrank, new, gone
 //! - Net change summary
 

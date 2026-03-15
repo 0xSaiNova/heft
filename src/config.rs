@@ -75,12 +75,14 @@ struct FileConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct StalenessConfig {
     pub brackets: Vec<StalenessBracket>,
     pub default_factor: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct StalenessBracket {
     pub days: u64,
     pub factor: f64,
@@ -224,9 +226,9 @@ impl Config {
             roots,
             timeout: Duration::from_secs(file.scan.timeout.unwrap_or(30)),
             disabled_detectors: disabled_from_file(&file.detectors),
-            json_output: false,
-            verbose: false,
-            progressive: false,
+            json_output: file.scan.json.unwrap_or(false),
+            verbose: file.scan.verbose.unwrap_or(false),
+            progressive: file.scan.progressive.unwrap_or(false),
             platform,
             activity: build_activity_config(&file.activity),
             staleness: file.staleness.clone(),
