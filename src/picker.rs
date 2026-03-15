@@ -136,9 +136,11 @@ pub fn run_picker(
             crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
         )?;
 
-        // Move cursor back up to top of our drawing area for next redraw
-        let lines_drawn = (end - offset) + 1 + 1; // items + header + footer
-        execute!(out, cursor::MoveUp(lines_drawn as u16))?;
+        // move back to top of drawing area. total lines with \n\r:
+        // 1 (header) + (end - offset) items + (visible - (end - offset)) empties = 1 + visible.
+        // footer has no trailing newline, so cursor sits on line (visible + 1).
+        let lines_printed = visible + 1;
+        execute!(out, cursor::MoveUp(lines_printed as u16))?;
 
         out.flush()?;
         Ok(())
@@ -165,6 +167,11 @@ pub fn run_picker(
             Err(_) => break Vec::new(),
         };
         if let Event::Key(key) = ev {
+            // on windows/wsl crossterm fires Press, Repeat, and Release events.
+            // only act on Press to avoid double-toggling.
+            if key.kind != crossterm::event::KeyEventKind::Press {
+                continue;
+            }
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => break Vec::new(),
                 KeyCode::Enter => {
