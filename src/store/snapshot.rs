@@ -255,6 +255,66 @@ impl Store {
 
         Ok(entries)
     }
+
+    /// Save an audit result as a snapshot
+    pub fn save_audit(
+        &mut self,
+        result: &crate::audit::AuditResult,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+
+        let tx = self.conn.transaction()?;
+
+        tx.execute(
+            "INSERT INTO audit_snapshots (timestamp, total_bytes, file_count, dir_count, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                timestamp,
+                i64::try_from(result.total_bytes).unwrap_or(i64::MAX),
+                i64::try_from(result.file_count).unwrap_or(i64::MAX),
+                i64::try_from(result.dir_count).unwrap_or(i64::MAX),
+                i64::try_from(result.duration.as_millis()).unwrap_or(i64::MAX),
+            ],
+        )?;
+
+        let snapshot_id = tx.last_insert_rowid();
+
+        // store per-category aggregates
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO audit_items (snapshot_id, category, subcategory, path, size_bytes, file_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        )?;
+
+        for (category, size) in &result.by_category {
+            stmt.execute(params![
+                snapshot_id,
+                category.label(),
+                Option::<String>::None,
+                "",
+                i64::try_from(*size).unwrap_or(i64::MAX),
+                0i64,
+            ])?;
+        }
+
+        // store top directories
+        for (path, size, category) in &result.top_dirs {
+            stmt.execute(params![
+                snapshot_id,
+                category.label(),
+                Option::<String>::None,
+                path.to_string_lossy().as_ref(),
+                i64::try_from(*size).unwrap_or(i64::MAX),
+                0i64,
+            ])?;
+        }
+
+        drop(stmt);
+        tx.commit()?;
+
+        Ok(snapshot_id)
+    }
 }
 
 fn snapshot_from_row(row: &rusqlite::Row) -> rusqlite::Result<Snapshot> {

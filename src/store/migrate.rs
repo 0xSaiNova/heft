@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 1;
+const CURRENT_VERSION: i64 = 2;
 
 /// Run any pending migrations. Called on every Store::open().
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
@@ -13,6 +13,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
 
     if version < 1 {
         migrate_v1(conn)?;
+    }
+    if version < 2 {
+        migrate_v2(conn)?;
     }
 
     if version < CURRENT_VERSION {
@@ -42,6 +45,32 @@ fn migrate_v1(conn: &Connection) -> rusqlite::Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+/// v2: add audit snapshot tables for full drive audit persistence.
+fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS audit_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER NOT NULL,
+            total_bytes INTEGER NOT NULL,
+            file_count INTEGER NOT NULL,
+            dir_count INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS audit_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            snapshot_id INTEGER NOT NULL,
+            category TEXT NOT NULL,
+            subcategory TEXT,
+            path TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            file_count INTEGER NOT NULL,
+            FOREIGN KEY(snapshot_id) REFERENCES audit_snapshots(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_items_snapshot ON audit_items(snapshot_id);"
+    )?;
     Ok(())
 }
 

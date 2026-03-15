@@ -463,6 +463,19 @@ fn main() {
 
             let result = audit::run(&config);
 
+            // save audit snapshot if requested
+            if args.save {
+                match Store::open() {
+                    Ok(mut store) => {
+                        match store.save_audit(&result) {
+                            Ok(id) => eprintln!("Audit saved as snapshot #{id}"),
+                            Err(e) => eprintln!("Warning: failed to save audit: {e}"),
+                        }
+                    }
+                    Err(e) => eprintln!("Warning: failed to open store: {e}"),
+                }
+            }
+
             match args.export.as_deref() {
                 Some("json") => {
                     let mut stdout = std::io::stdout().lock();
