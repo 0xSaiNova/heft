@@ -145,7 +145,11 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Scan(args) => {
+        None => {
+            eprintln!("Default flow not yet implemented.");
+            std::process::exit(1);
+        }
+        Some(Command::Scan(args)) => {
             let config = Config::from_scan_args(&args);
             let result = scan::run(&config);
 
@@ -166,7 +170,7 @@ fn main() {
 
             report::print(&result, &config);
         }
-        Command::Report(args) => {
+        Some(Command::Report(args)) => {
             let store = match Store::open() {
                 Ok(s) => s,
                 Err(e) => {
@@ -272,7 +276,7 @@ fn main() {
                 }
             }
         }
-        Command::Clean(args) => {
+        Some(Command::Clean(args)) => {
             let mut config = Config::from_clean_args(&args);
 
             // handle --active-window override
@@ -352,7 +356,7 @@ fn main() {
                 }
             }
         }
-        Command::Diff(args) => {
+        Some(Command::Diff(args)) => {
             use heft::store::diff;
 
             let store = match Store::open() {
@@ -446,7 +450,7 @@ fn main() {
 
             print_diff(&diff_result);
         }
-        Command::Audit(args) => {
+        Some(Command::Audit(args)) => {
             let roots = args.roots.unwrap_or_else(|| {
                 heft::platform::home_dir()
                     .map(|h| vec![h])

@@ -7,7 +7,31 @@ use std::path::PathBuf;
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
+
+    /// Show what would be cleaned without making changes
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Output as JSON
+    #[arg(long)]
+    pub json: bool,
+
+    /// Directories to scan (defaults to home directory)
+    #[arg(long, value_delimiter = ',')]
+    pub root: Option<Vec<PathBuf>>,
+
+    /// Minimum file size for large file discovery
+    #[arg(long, default_value = "1GB")]
+    pub min_size: String,
+
+    /// Include active projects in cleanup
+    #[arg(long)]
+    pub include_active: bool,
+
+    /// Automatically clean all stale items
+    #[arg(long)]
+    pub auto: bool,
 }
 
 #[derive(Subcommand)]
