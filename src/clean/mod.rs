@@ -31,6 +31,7 @@ pub enum CleanMode {
 pub struct CleanOptions {
     pub category_filter: Option<Vec<BloatCategory>>,
     pub include_active: bool,
+    pub stale_only: bool,
 }
 
 pub struct CleanResult {
@@ -61,6 +62,14 @@ pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanRes
                 if !filter.contains(&entry.category) {
                     return false;
                 }
+            }
+            if opts.stale_only && entry.staleness_score.unwrap_or(0.0) <= 0.0 {
+                return false;
+            }
+            // skip entries marked as informational-only (e.g. WSL2 vhdx disks).
+            // these are useful in scan output but should never be in the clean path.
+            if entry.reclaimable_bytes == 0 {
+                return false;
             }
             true
         })
@@ -263,23 +272,19 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
         }
     }
 
-    // allow /tmp and its subdirectories on unix-like systems
-    #[cfg(unix)]
-    {
-        if path.starts_with("/tmp") {
-            return Ok(());
-        }
+    // allow the OS temp directory. std::env::temp_dir() returns the
+    // platform native temp path ($TMPDIR on macOS which is /var/folders/...,
+    // %TEMP% on Windows, /tmp on most Linux).
+    let tmp = std::env::temp_dir();
+    if path.starts_with(&tmp) {
+        return Ok(());
     }
 
-    // allow Windows temp directories
-    #[cfg(windows)]
+    // hardcoded fallbacks for unix where $TMPDIR may not match /tmp
+    #[cfg(unix)]
     {
-        if let Some(temp) = std::env::var_os("TEMP").or_else(|| std::env::var_os("TMP")) {
-            use std::path::PathBuf;
-            let temp_path = PathBuf::from(temp);
-            if path.starts_with(&temp_path) {
-                return Ok(());
-            }
+        if path.starts_with("/tmp") || path.starts_with("/private/tmp") {
+            return Ok(());
         }
     }
 
@@ -369,5 +374,6 @@ fn category_sort_order(category: &BloatCategory) -> u8 {
         BloatCategory::IdeData => 3,
         BloatCategory::SystemCache => 4,
         BloatCategory::Other => 5,
+        BloatCategory::LargeFile => 6,
     }
 }

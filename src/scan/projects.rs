@@ -105,6 +105,8 @@ fn scan_directory(
                         cleanup_hint: Some(artifact.cleanup_hint.to_string()),
                         active: None,
                         active_reason: None,
+                        staleness_score: None,
+                        safety: None,
                     });
 
                     seen_projects.insert(project_root.to_path_buf());

@@ -178,6 +178,8 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
             cleanup_hint: Some(get_cleanup_hint(&df_entry.type_)),
             active: None,
             active_reason: None,
+            staleness_score: None,
+            safety: None,
         });
     }
 
@@ -307,6 +309,8 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
         cleanup_hint: Some(cleanup_hint),
         active: None,
         active_reason: None,
+        staleness_score: None,
+        safety: None,
     })
 }
 

@@ -51,6 +51,10 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             cleanup_hint TEXT,
             active INTEGER,
             active_reason TEXT,
+            staleness_score REAL,
+            safety_tier TEXT,
+            safety_reason TEXT,
+            git_dirty_files INTEGER,
             FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
         )",
         [],
@@ -125,8 +129,8 @@ impl Store {
         let snapshot_id = tx.last_insert_rowid();
 
         let mut stmt = tx.prepare_cached(
-            "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
+            "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason, staleness_score, safety_tier, safety_reason, git_dirty_files)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
         )?;
 
         for entry in &result.entries {
@@ -146,7 +150,11 @@ impl Store {
                 entry.last_modified,
                 entry.cleanup_hint.as_deref(),
                 entry.active,
-                entry.active_reason.as_deref()
+                entry.active_reason.as_deref(),
+                entry.staleness_score,
+                entry.safety.as_ref().map(|s| s.tier.as_str()),
+                entry.safety.as_ref().map(|s| s.reason.as_str()),
+                entry.safety.as_ref().and_then(|s| s.git_dirty_files),
             ])?;
         }
 
@@ -212,7 +220,7 @@ impl Store {
         snapshot_id: i64,
     ) -> Result<Vec<BloatEntry>, Box<dyn std::error::Error>> {
         let mut stmt = self.conn.prepare(
-            "SELECT category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason
+            "SELECT category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason, staleness_score, safety_tier, safety_reason, git_dirty_files
              FROM entries
              WHERE snapshot_id = ?1"
         )?;
@@ -236,6 +244,7 @@ impl Store {
                     "PackageCache" => BloatCategory::PackageCache,
                     "IdeData" => BloatCategory::IdeData,
                     "SystemCache" => BloatCategory::SystemCache,
+                    "LargeFile" => BloatCategory::LargeFile,
                     _ => BloatCategory::Other,
                 };
 
@@ -249,6 +258,23 @@ impl Store {
                     cleanup_hint: row.get(6)?,
                     active: row.get::<_, Option<bool>>(7)?,
                     active_reason: row.get(8)?,
+                    staleness_score: row.get::<_, Option<f64>>(9)?,
+                    safety: {
+                        let tier_str: Option<String> = row.get(10)?;
+                        tier_str.and_then(|t| {
+                            crate::safety::SafetyTier::parse(&t).map(|tier| {
+                                crate::safety::SafetyInfo {
+                                    tier,
+                                    reason: row
+                                        .get::<_, Option<String>>(11)
+                                        .ok()
+                                        .flatten()
+                                        .unwrap_or_default(),
+                                    git_dirty_files: row.get(12).ok().flatten(),
+                                }
+                            })
+                        })
+                    },
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -344,6 +370,8 @@ mod tests {
             cleanup_hint: None,
             active: None,
             active_reason: None,
+            staleness_score: None,
+            safety: None,
         }
     }
 

@@ -1,7 +1,7 @@
 use clap::Parser;
 use heft::audit;
 use heft::clean;
-use heft::cli::{CleanCategory, Cli, Command};
+use heft::cli::{CleanCategory, Cli, Command, SortOrder};
 use heft::config::Config;
 use heft::report;
 use heft::scan;
@@ -145,9 +145,23 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Scan(args) => {
+        None => {
+            let config = Config::from_bare_cli(cli.root.clone());
+            heft::default::run_default(&cli, config);
+        }
+        Some(Command::Scan(args)) => {
             let config = Config::from_scan_args(&args);
-            let result = scan::run(&config);
+            let mut result = scan::run(&config);
+
+            if args.sort == SortOrder::Staleness {
+                result.entries.sort_by(|a, b| {
+                    let sa = a.staleness_score.unwrap_or(0.0);
+                    let sb = b.staleness_score.unwrap_or(0.0);
+                    sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+
+            heft::safety::classify_all(&mut result.entries);
 
             match Store::open() {
                 Ok(mut store) => {
@@ -164,9 +178,16 @@ fn main() {
                 }
             }
 
-            report::print(&result, &config);
+            if config.json_output {
+                println!("{}", report::json::render(&result));
+            } else if args.sort == SortOrder::Staleness {
+                // flat staleness ranked output (table renderer would re-group by category)
+                heft::summary::print_summary(&result.entries);
+            } else {
+                report::print(&result, &config);
+            }
         }
-        Command::Report(args) => {
+        Some(Command::Report(args)) => {
             let store = match Store::open() {
                 Ok(s) => s,
                 Err(e) => {
@@ -272,7 +293,7 @@ fn main() {
                 }
             }
         }
-        Command::Clean(args) => {
+        Some(Command::Clean(args)) => {
             let mut config = Config::from_clean_args(&args);
 
             // handle --active-window override
@@ -289,7 +310,8 @@ fn main() {
                 }
             }
 
-            let scan_result = scan::run(&config);
+            let mut scan_result = scan::run(&config);
+            heft::safety::classify_all(&mut scan_result.entries);
 
             let mode = if args.dry_run {
                 clean::CleanMode::DryRun
@@ -316,6 +338,7 @@ fn main() {
                             heft::scan::detector::BloatCategory::SystemCache
                         }
                         CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                        CleanCategory::LargeFile => heft::scan::detector::BloatCategory::LargeFile,
                     })
                     .collect()
             });
@@ -323,6 +346,7 @@ fn main() {
             let clean_opts = clean::CleanOptions {
                 category_filter,
                 include_active: args.include_active,
+                stale_only: args.stale,
             };
             let clean_result = clean::run(&scan_result, mode, clean_opts);
 
@@ -351,7 +375,7 @@ fn main() {
                 }
             }
         }
-        Command::Diff(args) => {
+        Some(Command::Diff(args)) => {
             use heft::store::diff;
 
             let store = match Store::open() {
@@ -445,7 +469,7 @@ fn main() {
 
             print_diff(&diff_result);
         }
-        Command::Audit(args) => {
+        Some(Command::Audit(args)) => {
             let roots = args.roots.unwrap_or_else(|| {
                 heft::platform::home_dir()
                     .map(|h| vec![h])

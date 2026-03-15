@@ -175,6 +175,25 @@ pub fn run(config: &Config) -> ScanResult {
         scan_result.entries[i].active_reason = ar.reason;
     }
 
+    // compute staleness scores
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let staleness_cfg = config.staleness.clone().unwrap_or_default();
+    for entry in &mut scan_result.entries {
+        entry.staleness_score = Some(if entry.active == Some(true) {
+            0.0
+        } else {
+            crate::staleness::compute_staleness(
+                entry.size_bytes,
+                entry.last_modified,
+                now,
+                &staleness_cfg,
+            )
+        });
+    }
+
     // Stop spinner before printing results
     if let Some(sp) = spinner {
         sp.stop();
