@@ -177,8 +177,12 @@ pub fn run_picker(
                     break picks;
                 }
                 KeyCode::Char(' ') => {
-                    selected[cursor_pos] = !selected[cursor_pos];
-                    let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                    // dont allow toggling active items unless include_active
+                    let is_protected = entries[cursor_pos].active == Some(true) && !include_active;
+                    if !is_protected {
+                        selected[cursor_pos] = !selected[cursor_pos];
+                        let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                    }
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
                     if cursor_pos + 1 < count {

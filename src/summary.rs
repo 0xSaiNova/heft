@@ -22,16 +22,17 @@ pub fn print_summary(entries: &[BloatEntry]) {
         b_total.cmp(&a_total)
     });
 
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
     for (category, cat_entries) in &categories {
         let cat_total: u64 = cat_entries.iter().map(|e| e.size_bytes).sum();
         let top_items: Vec<String> = cat_entries
             .iter()
             .take(3)
             .map(|e| {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64;
                 let age_str = e
                     .last_modified
                     .map(|ts| format_age(now - ts))

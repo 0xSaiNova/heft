@@ -95,8 +95,14 @@ pub struct ScanArgs {
     pub no_progressive: bool,
 
     /// Sort output by size (default) or staleness
-    #[arg(long, default_value = "size")]
-    pub sort: String,
+    #[arg(long, value_enum, default_value = "size")]
+    pub sort: SortOrder,
+}
+
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
+pub enum SortOrder {
+    Size,
+    Staleness,
 }
 
 #[derive(Parser)]

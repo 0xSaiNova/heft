@@ -1,7 +1,7 @@
 use clap::Parser;
 use heft::audit;
 use heft::clean;
-use heft::cli::{CleanCategory, Cli, Command};
+use heft::cli::{CleanCategory, Cli, Command, SortOrder};
 use heft::config::Config;
 use heft::report;
 use heft::scan;
@@ -153,7 +153,7 @@ fn main() {
             let config = Config::from_scan_args(&args);
             let mut result = scan::run(&config);
 
-            if args.sort == "staleness" {
+            if args.sort == SortOrder::Staleness {
                 result.entries.sort_by(|a, b| {
                     let sa = a.staleness_score.unwrap_or(0.0);
                     let sb = b.staleness_score.unwrap_or(0.0);
@@ -176,7 +176,12 @@ fn main() {
                 }
             }
 
-            report::print(&result, &config);
+            if args.sort == SortOrder::Staleness {
+                // flat staleness ranked output (table renderer would re-group by category)
+                heft::summary::print_summary(&result.entries);
+            } else {
+                report::print(&result, &config);
+            }
         }
         Some(Command::Report(args)) => {
             let store = match Store::open() {

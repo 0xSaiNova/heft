@@ -124,6 +124,30 @@ pub fn run_default(cli: &Cli, config: Config) {
 }
 
 fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_active: bool) {
+    if entries.is_empty() {
+        println!("  Nothing to clean.");
+        return;
+    }
+
+    let total: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
+    println!(
+        "\n  About to clean {} ({} items)",
+        crate::util::format_bytes(total),
+        entries.len()
+    );
+    print!("  Proceed? [y/N] ");
+    use std::io::Write;
+    let _ = std::io::stdout().flush();
+
+    let mut input = String::new();
+    if std::io::stdin().read_line(&mut input).is_err() {
+        return;
+    }
+    if !input.trim().eq_ignore_ascii_case("y") {
+        println!("  Cancelled.");
+        return;
+    }
+
     let mut selected = ScanResult::empty();
     selected.entries = entries;
     let opts = clean::CleanOptions {

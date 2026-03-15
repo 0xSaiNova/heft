@@ -367,7 +367,7 @@ mod tests {
             no_verbose: false,
             progressive: false,
             no_progressive: false,
-            sort: "size".to_string(),
+            sort: crate::cli::SortOrder::Size,
         }
     }
 
