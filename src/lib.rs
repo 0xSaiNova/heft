@@ -11,6 +11,7 @@ pub mod scan;
 pub mod spinner;
 pub mod staleness;
 pub mod store;
+pub mod summary;
 #[cfg(feature = "tui")]
 pub mod tui;
 pub mod util;
