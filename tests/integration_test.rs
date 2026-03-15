@@ -209,9 +209,8 @@ fn detects_dotnet_bin_obj_with_csproj() {
     let projects = project_entries(&result);
 
     assert!(
-        projects.len() >= 1,
-        "expected at least 1 .NET artifact, got {}",
-        projects.len()
+        !projects.is_empty(),
+        "expected at least 1 .NET artifact, got 0"
     );
     assert!(
         projects
