@@ -72,6 +72,44 @@ struct FileConfig {
     audit: FileAuditConfig,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct StalenessConfig {
+    pub brackets: Vec<StalenessBracket>,
+    pub default_factor: f64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct StalenessBracket {
+    pub days: u64,
+    pub factor: f64,
+}
+
+impl Default for StalenessConfig {
+    fn default() -> Self {
+        StalenessConfig {
+            brackets: vec![
+                StalenessBracket {
+                    days: 7,
+                    factor: 0.0,
+                },
+                StalenessBracket {
+                    days: 30,
+                    factor: 0.5,
+                },
+                StalenessBracket {
+                    days: 90,
+                    factor: 1.0,
+                },
+                StalenessBracket {
+                    days: 180,
+                    factor: 2.0,
+                },
+            ],
+            default_factor: 3.0,
+        }
+    }
+}
+
 /// Load audit custom rules and min_entry_size from config file.
 pub fn load_audit_config() -> (Vec<crate::audit::categories::CustomRule>, Option<u64>) {
     let file = load_file_config().unwrap_or_default();
@@ -159,6 +197,7 @@ pub struct Config {
     pub progressive: bool,
     pub platform: Platform,
     pub activity: ActivityConfig,
+    pub staleness: Option<StalenessConfig>,
 }
 
 fn build_activity_config(file: &FileActivityConfig) -> ActivityConfig {
@@ -242,6 +281,7 @@ impl Config {
             progressive,
             platform,
             activity: build_activity_config(&file.activity),
+            staleness: None,
         }
     }
 
@@ -281,6 +321,7 @@ impl Config {
             progressive: file.scan.progressive.unwrap_or(false),
             platform,
             activity: build_activity_config(&file.activity),
+            staleness: None,
         }
     }
 }
@@ -299,6 +340,7 @@ impl Default for Config {
             progressive: false,
             platform,
             activity: ActivityConfig::default(),
+            staleness: None,
         }
     }
 }
