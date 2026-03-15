@@ -136,6 +136,14 @@ pub struct CleanArgs {
     /// Disable verbose output (overrides config file)
     #[arg(long, conflicts_with = "verbose", hide_short_help = true)]
     pub no_verbose: bool,
+
+    /// Include active projects in cleanup (by default they are protected)
+    #[arg(long, default_value_t = false)]
+    pub include_active: bool,
+
+    /// Override the active use time window (e.g. "3d", "24h", "0s" to disable)
+    #[arg(long)]
+    pub active_window: Option<String>,
 }
 
 #[derive(Parser)]

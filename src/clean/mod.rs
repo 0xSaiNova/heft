@@ -28,38 +28,49 @@ pub enum CleanMode {
     Execute,
 }
 
+pub struct CleanOptions {
+    pub category_filter: Option<Vec<BloatCategory>>,
+    pub include_active: bool,
+}
+
 pub struct CleanResult {
     pub deleted: Vec<String>,
     pub errors: Vec<String>,
     pub bytes_freed: u64,
 }
 
-pub fn run(
-    result: &ScanResult,
-    mode: CleanMode,
-    category_filter: Option<Vec<BloatCategory>>,
-) -> CleanResult {
+pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanResult {
     let mut clean_result = CleanResult {
         deleted: Vec::new(),
         errors: Vec::new(),
         bytes_freed: 0,
     };
 
-    // filter entries by category if specified, using iterator to avoid allocation
-    let entries = result.entries.iter().filter(|entry| {
-        // allow docker aggregates through, filter out other aggregates
-        if let Location::Aggregate(ref name) = entry.location {
-            if !is_docker_aggregate(name) {
+    // partition entries: eligible for cleanup vs protected by activity status
+    let (eligible, protected): (Vec<&BloatEntry>, Vec<&BloatEntry>) =
+        result.entries.iter().partition(|entry| {
+            // filter out non-docker aggregates
+            if let Location::Aggregate(ref name) = entry.location {
+                if !is_docker_aggregate(name) {
+                    return false;
+                }
+            }
+
+            if let Some(ref filter) = opts.category_filter {
+                if !filter.contains(&entry.category) {
+                    return false;
+                }
+            }
+
+            // skip active entries unless explicitly included
+            if !opts.include_active && entry.active == Some(true) {
                 return false;
             }
-        }
 
-        if let Some(ref filter) = category_filter {
-            filter.contains(&entry.category)
-        } else {
             true
-        }
-    });
+        });
+
+    let entries = eligible.into_iter();
 
     // process based on mode - match once instead of per entry
     match mode {
@@ -70,6 +81,16 @@ pub fn run(
                     .deleted
                     .push(format!("[dry-run] would delete: {location_str}"));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
+            }
+            for entry in &protected {
+                let location_str = location_display(&entry.location);
+                let reason = entry
+                    .active_reason
+                    .as_deref()
+                    .unwrap_or("active project");
+                clean_result
+                    .deleted
+                    .push(format!("[protected] {location_str} ({reason})"));
             }
         }
         CleanMode::Interactive => {

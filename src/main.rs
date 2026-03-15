@@ -254,7 +254,21 @@ fn main() {
             }
         }
         Command::Clean(args) => {
-            let config = Config::from_clean_args(&args);
+            let mut config = Config::from_clean_args(&args);
+
+            // handle --active-window override
+            if let Some(ref window_str) = args.active_window {
+                if window_str == "0s" || window_str == "0" {
+                    config.activity.enable_git = false;
+                    config.activity.enable_mtime = false;
+                } else if let Ok(d) = humantime::parse_duration(window_str) {
+                    config.activity.window = d;
+                } else {
+                    eprintln!("Invalid active window: '{window_str}'. Use e.g. '7d', '24h', '0s'.");
+                    std::process::exit(1);
+                }
+            }
+
             let scan_result = scan::run(&config);
 
             let mode = if args.dry_run {
@@ -286,7 +300,11 @@ fn main() {
                     .collect()
             });
 
-            let clean_result = clean::run(&scan_result, mode, category_filter);
+            let clean_opts = clean::CleanOptions {
+                category_filter,
+                include_active: args.include_active,
+            };
+            let clean_result = clean::run(&scan_result, mode, clean_opts);
 
             if !matches!(mode, clean::CleanMode::Interactive) {
                 for item in &clean_result.deleted {
