@@ -55,10 +55,24 @@ fn should_skip_dir(path: &Path, home: Option<&Path>) -> bool {
     }
 }
 
-pub fn find_big_files(roots: &[PathBuf], min_bytes: u64) -> Vec<BigFile> {
+pub struct BigFileResult {
+    pub files: Vec<BigFile>,
+    pub partial: bool,
+}
+
+/// Walk roots looking for files larger than min_bytes. Stops after timeout
+/// and returns whatever was found so far, with partial=true.
+pub fn find_big_files(
+    roots: &[PathBuf],
+    min_bytes: u64,
+    timeout: std::time::Duration,
+) -> BigFileResult {
     let mut results = Vec::new();
     let home = crate::platform::home_dir();
-    for root in roots {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut timed_out = false;
+
+    'outer: for root in roots {
         let root_dev = get_device_id(root);
         for entry in jwalk::WalkDir::new(root)
             .skip_hidden(false)
@@ -66,6 +80,13 @@ pub fn find_big_files(roots: &[PathBuf], min_bytes: u64) -> Vec<BigFile> {
             .into_iter()
             .filter_map(|e| e.ok())
         {
+            // check deadline every iteration. jwalk is parallel so this
+            // doesn't add meaningful overhead vs the filesystem i/o.
+            if std::time::Instant::now() > deadline {
+                timed_out = true;
+                break 'outer;
+            }
+
             let path = entry.path();
             if should_skip_dir(&path, home.as_deref()) {
                 continue;
@@ -96,7 +117,11 @@ pub fn find_big_files(roots: &[PathBuf], min_bytes: u64) -> Vec<BigFile> {
             }
         }
     }
-    results
+
+    BigFileResult {
+        files: results,
+        partial: timed_out,
+    }
 }
 
 pub fn dedup_big_files(big_files: &mut Vec<BigFile>, detector_entries: &[BloatEntry]) {

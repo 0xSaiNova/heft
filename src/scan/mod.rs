@@ -4,6 +4,7 @@ pub mod docker;
 pub mod projects;
 pub mod xcode;
 
+use std::io::IsTerminal;
 use std::path::Path;
 
 use serde::Serialize;
@@ -70,13 +71,10 @@ pub fn run(config: &Config) -> ScanResult {
         peak_memory = Some(usage.physical_mem);
     }
 
-    // Show a spinner when running interactively without progressive output
-    let use_spinner = !config.progressive && !config.json_output;
-    let spinner = if use_spinner {
-        Spinner::start("Scanning...")
-    } else {
-        None
-    };
+    // show progress when running interactively (not json, stdout is a tty).
+    // progressive mode gets verbose per-detector output. normal interactive
+    // mode gets a spinner per detector that's replaced by a completion line.
+    let show_progress = !config.json_output && std::io::stderr().is_terminal();
 
     for detector in detectors {
         let detector_name = detector.name();
@@ -99,15 +97,16 @@ pub fn run(config: &Config) -> ScanResult {
             continue;
         }
 
-        // Show start message in progressive mode
-        if config.progressive {
-            eprintln!("Scanning {detector_name}...");
-        }
-
-        // Update spinner with current detector
-        if let Some(ref sp) = spinner {
-            sp.set_message(&format!("Scanning {detector_name}..."));
-        }
+        // show a spinner while this detector runs, then replace it with
+        // a completion line. each detector gets its own short-lived spinner.
+        let spinner = if show_progress && !config.progressive {
+            Spinner::start(&format!("Scanning {detector_name}..."))
+        } else {
+            if config.progressive {
+                eprintln!("Scanning {detector_name}...");
+            }
+            None
+        };
 
         // Sample memory BEFORE detector runs (if tracking enabled)
         let memory_before = if peak_memory.is_some() {
@@ -149,10 +148,22 @@ pub fn run(config: &Config) -> ScanResult {
                 .push((detector_name.to_string(), memory_delta));
         }
 
-        // Show completion message in progressive mode
-        if config.progressive {
-            let count = result.entries.len();
-            let total_bytes: u64 = result.entries.iter().map(|e| e.size_bytes).sum();
+        let count = result.entries.len();
+        let total_bytes: u64 = result.entries.iter().map(|e| e.size_bytes).sum();
+
+        // stop the per-detector spinner and print a completion line
+        if let Some(sp) = spinner {
+            sp.stop();
+        }
+        if show_progress && !config.progressive {
+            eprintln!(
+                "  \x1b[32m✓\x1b[0m {:<12} {:>3} items   {:>10}   ({:.1}s)",
+                detector_name,
+                count,
+                format_bytes(total_bytes),
+                detector_duration.as_secs_f64()
+            );
+        } else if config.progressive {
             eprintln!(
                 "{} complete: {} items, {}, {:.2}s",
                 detector_name,
@@ -166,13 +177,18 @@ pub fn run(config: &Config) -> ScanResult {
     }
 
     // annotate entries with activity status
-    if let Some(ref sp) = spinner {
-        sp.set_message("Checking activity...");
-    }
+    let activity_spinner = if show_progress && !config.progressive {
+        Spinner::start("Checking activity...")
+    } else {
+        None
+    };
     let activity_results = crate::activity::check(&scan_result.entries, &config.activity);
     for (i, ar) in activity_results.into_iter().enumerate() {
         scan_result.entries[i].active = Some(ar.active);
         scan_result.entries[i].active_reason = ar.reason;
+    }
+    if let Some(sp) = activity_spinner {
+        sp.stop();
     }
 
     // compute staleness scores
@@ -192,11 +208,6 @@ pub fn run(config: &Config) -> ScanResult {
                 &staleness_cfg,
             )
         });
-    }
-
-    // Stop spinner before printing results
-    if let Some(sp) = spinner {
-        sp.stop();
     }
 
     scan_result.duration_ms = Some(start.elapsed().as_millis());

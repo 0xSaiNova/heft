@@ -1,8 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use heft::big;
 use heft::scan::detector::{BloatCategory, BloatEntry, Location};
+
+const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[test]
 fn finds_files_above_threshold() {
@@ -23,8 +26,8 @@ fn finds_files_above_threshold() {
     let large = tmp.path().join("large.bin");
     fs::write(&large, vec![0u8; 10_000_000]).unwrap();
 
-    let results = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000);
-    let paths: Vec<&PathBuf> = results.iter().map(|r| &r.path).collect();
+    let result = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000, TEST_TIMEOUT);
+    let paths: Vec<&PathBuf> = result.files.iter().map(|r| &r.path).collect();
 
     assert!(!paths.contains(&&small), "500KB file should be excluded");
     assert!(paths.contains(&&medium), "5MB file should be found");
@@ -41,8 +44,8 @@ fn ignores_files_below_threshold() {
     fs::write(tmp.path().join("tiny.txt"), "hello").unwrap();
     fs::write(tmp.path().join("small.bin"), vec![0u8; 1000]).unwrap();
 
-    let results = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000);
-    assert!(results.is_empty(), "no files above threshold");
+    let result = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000, TEST_TIMEOUT);
+    assert!(result.files.is_empty(), "no files above threshold");
 }
 
 #[test]
@@ -64,8 +67,9 @@ fn does_not_follow_symlinks() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&external_file, tmp.path().join("link.bin")).unwrap();
 
-    let results = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000);
-    let paths: Vec<String> = results
+    let result = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000, TEST_TIMEOUT);
+    let paths: Vec<String> = result
+        .files
         .iter()
         .map(|r| r.path.display().to_string())
         .collect();
@@ -94,7 +98,7 @@ fn handles_permission_denied() {
     }
 
     // should not panic
-    let _results = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000);
+    let _results = big::find_big_files(&[tmp.path().to_path_buf()], 1_000_000, TEST_TIMEOUT);
 
     // restore permissions for cleanup
     #[cfg(unix)]

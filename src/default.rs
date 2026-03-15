@@ -19,11 +19,38 @@ pub fn run_default(cli: &Cli, config: Config) {
         std::process::exit(1);
     });
 
-    // run detector scan
+    let is_tty = std::io::stderr().is_terminal();
+
+    // run detector scan (prints per-detector progress lines when interactive)
     let mut result = scan::run(&config);
 
-    // find big files outside detector coverage
-    let mut big_files = big::find_big_files(&config.roots, min_bytes);
+    // find big files outside detector coverage, capped at 10 seconds.
+    // on large disks the full walk can take minutes — partial results are
+    // better than hanging.
+    let big_file_timeout = std::time::Duration::from_secs(10);
+    let spinner = if is_tty && !config.json_output {
+        crate::spinner::Spinner::start("Scanning large files...")
+    } else {
+        None
+    };
+    let big_result = big::find_big_files(&config.roots, min_bytes, big_file_timeout);
+    if let Some(sp) = spinner {
+        sp.stop();
+    }
+    if is_tty && !config.json_output {
+        let label = if big_result.partial {
+            "partial"
+        } else {
+            "done"
+        };
+        eprintln!(
+            "  \x1b[32m✓\x1b[0m {:<12} {:>3} items                ({label})",
+            "big files",
+            big_result.files.len(),
+        );
+    }
+
+    let mut big_files = big_result.files;
     big::dedup_big_files(&mut big_files, &result.entries);
     let mut new_entries: Vec<_> = big_files.into_iter().map(big::big_file_to_entry).collect();
 
@@ -68,7 +95,7 @@ pub fn run_default(cli: &Cli, config: Config) {
     }
 
     // json mode: print and exit
-    if cli.json {
+    if config.json_output {
         println!("{}", report::json::render(&result));
         return;
     }
