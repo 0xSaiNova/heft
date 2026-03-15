@@ -200,6 +200,8 @@ fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_ac
     let total = entries.len();
     for (i, entry) in entries.iter().enumerate() {
         eprint!("  [{}/{}] cleaning {}...", i + 1, total, entry.name);
+        let _ = std::io::stderr().flush();
+
         let mut selected = ScanResult::empty();
         selected.entries = vec![entry.clone()];
         let opts = clean::CleanOptions {
@@ -208,12 +210,15 @@ fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_ac
             stale_only: false,
         };
         let result = clean::run(&selected, clean::CleanMode::Execute, opts);
-        if result.errors.is_empty() {
+        if !result.errors.is_empty() {
+            eprintln!(" \x1b[31mfailed\x1b[0m");
+            errors.extend(result.errors);
+        } else if result.bytes_freed > 0 {
             eprintln!(" \x1b[32mdone\x1b[0m");
             bytes_freed += result.bytes_freed;
         } else {
-            eprintln!(" \x1b[31mfailed\x1b[0m");
-            errors.extend(result.errors);
+            // entry was silently skipped (e.g. filtered as protected)
+            eprintln!(" \x1b[33mskipped\x1b[0m");
         }
     }
     for err in &errors {
@@ -221,6 +226,8 @@ fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_ac
     }
     if bytes_freed > 0 {
         println!("\n  Freed {}", crate::util::format_bytes(bytes_freed));
+    } else if errors.is_empty() {
+        println!("\n  Nothing was deleted.");
     }
 }
 

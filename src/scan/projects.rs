@@ -45,15 +45,25 @@ impl Detector for ProjectDetector {
     }
 }
 
+// intermediate struct collected during the discovery walk, before
+// size calculation. separating discovery from sizing lets us
+// parallelize the expensive calculate_dir_size calls.
+struct DiscoveredArtifact {
+    artifact_path: PathBuf,
+    project_root: PathBuf,
+    cleanup_hint: &'static str,
+    manifest_file: Option<&'static str>,
+}
+
 fn scan_directory(
     root: &Path,
     entries: &mut Vec<BloatEntry>,
     seen_projects: &mut HashSet<PathBuf>,
     diagnostics: &mut Vec<String>,
 ) {
-    // once we find an artifact like node_modules, we dont want to look inside it
-    // for more artifacts. this set tracks what weve already claimed.
+    // phase 1: discover artifacts (fast — just stat calls and dir traversal)
     let mut seen_artifacts: HashSet<PathBuf> = HashSet::new();
+    let mut discovered: Vec<DiscoveredArtifact> = Vec::new();
 
     let home = crate::platform::home_dir();
     let walker = WalkDir::new(root)
@@ -71,8 +81,6 @@ fn scan_directory(
 
         let path = entry.path();
 
-        // already inside something we detected, skip
-        // walk ancestors instead of iterating all seen — O(depth) not O(n)
         if path.ancestors().any(|a| seen_artifacts.contains(a)) {
             continue;
         }
@@ -85,47 +93,75 @@ fn scan_directory(
         if let Some(artifact) = detect_artifact(path, dir_name) {
             let project_root = path.parent().unwrap_or(path);
 
-            // monorepos have node_modules at root and also in each package.
-            // if weve seen the root already, skip the nested ones.
-            // walk ancestors instead of iterating all seen — O(depth) not O(n)
             if project_root.ancestors().any(|a| seen_projects.contains(a)) {
                 seen_artifacts.insert(path.to_path_buf());
                 continue;
             }
 
-            match super::calculate_dir_size(path) {
-                Ok((size, warnings)) => {
-                    let project_name = determine_project_name(project_root, &artifact);
-                    let last_modified = get_source_last_modified(project_root);
+            seen_projects.insert(project_root.to_path_buf());
+            seen_artifacts.insert(path.to_path_buf());
 
-                    entries.push(BloatEntry {
-                        category: BloatCategory::ProjectArtifacts,
-                        name: project_name,
-                        location: Location::FilesystemPath(path.to_path_buf()),
-                        size_bytes: size,
-                        reclaimable_bytes: size,
-                        last_modified,
-                        cleanup_hint: Some(artifact.cleanup_hint.to_string()),
-                        active: None,
-                        active_reason: None,
-                        staleness_score: None,
-                        safety: None,
-                    });
+            discovered.push(DiscoveredArtifact {
+                artifact_path: path.to_path_buf(),
+                project_root: project_root.to_path_buf(),
+                cleanup_hint: artifact.cleanup_hint,
+                manifest_file: artifact.manifest_file,
+            });
+        }
+    }
 
-                    seen_projects.insert(project_root.to_path_buf());
-                    seen_artifacts.insert(path.to_path_buf());
+    // phase 2: compute sizes in parallel. each artifact directory is
+    // independent so threads won't contend on the same files.
+    let size_results: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = discovered
+            .iter()
+            .map(|d| s.spawn(|| super::calculate_dir_size(&d.artifact_path)))
+            .collect();
+        handles.into_iter().map(|h| h.join()).collect()
+    });
 
-                    for warning in warnings {
-                        diagnostics.push(format!("{warning} (size may be underestimated)"));
-                    }
+    for (disc, result) in discovered.iter().zip(size_results) {
+        match result {
+            Ok(Ok((size, warnings))) => {
+                let project_name = determine_project_name(
+                    &disc.project_root,
+                    &ArtifactType {
+                        cleanup_hint: disc.cleanup_hint,
+                        manifest_file: disc.manifest_file,
+                    },
+                );
+                let last_modified = get_source_last_modified(&disc.project_root);
+
+                entries.push(BloatEntry {
+                    category: BloatCategory::ProjectArtifacts,
+                    name: project_name,
+                    location: Location::FilesystemPath(disc.artifact_path.clone()),
+                    size_bytes: size,
+                    reclaimable_bytes: size,
+                    last_modified,
+                    cleanup_hint: Some(disc.cleanup_hint.to_string()),
+                    active: None,
+                    active_reason: None,
+                    staleness_score: None,
+                    safety: None,
+                });
+
+                for warning in warnings {
+                    diagnostics.push(format!("{warning} (size may be underestimated)"));
                 }
-                Err(e) => {
-                    diagnostics.push(format!(
-                        "failed to calculate size of {}: {}",
-                        path.display(),
-                        e
-                    ));
-                }
+            }
+            Ok(Err(e)) => {
+                diagnostics.push(format!(
+                    "failed to calculate size of {}: {}",
+                    disc.artifact_path.display(),
+                    e
+                ));
+            }
+            Err(_) => {
+                diagnostics.push(format!(
+                    "size thread panicked for {}",
+                    disc.artifact_path.display()
+                ));
             }
         }
     }

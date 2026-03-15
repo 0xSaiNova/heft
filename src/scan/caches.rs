@@ -42,13 +42,23 @@ impl Detector for CacheDetector {
             get_cache_locations(&home, config.platform, config.timeout);
         diagnostics.extend(cache_diagnostics);
 
-        for cache in caches {
-            if !cache.path.exists() {
-                continue;
-            }
+        // filter to caches that exist, then compute sizes in parallel.
+        // each cache is an independent directory tree so there's no
+        // contention — this cuts wall time from sequential sum to
+        // max(individual) on machines with many caches.
+        let existing: Vec<_> = caches.into_iter().filter(|c| c.path.exists()).collect();
 
-            match super::calculate_dir_size(&cache.path) {
-                Ok((size, warnings)) if size > 0 => {
+        let results: Vec<_> = std::thread::scope(|s| {
+            let handles: Vec<_> = existing
+                .iter()
+                .map(|cache| s.spawn(|| super::calculate_dir_size(&cache.path)))
+                .collect();
+            handles.into_iter().map(|h| h.join()).collect()
+        });
+
+        for (cache, result) in existing.into_iter().zip(results) {
+            match result {
+                Ok(Ok((size, warnings))) if size > 0 => {
                     let reclaimable = if cache.not_reclaimable { 0 } else { size };
                     entries.push(BloatEntry {
                         category: cache.category,
@@ -68,9 +78,15 @@ impl Detector for CacheDetector {
                         diagnostics.push(format!("{warning} (size may be underestimated)"));
                     }
                 }
-                Ok(_) => {}
-                Err(e) => {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => {
                     diagnostics.push(format!("failed to scan {}: {}", cache.path.display(), e));
+                }
+                Err(_) => {
+                    diagnostics.push(format!(
+                        "cache size thread panicked for {}",
+                        cache.path.display()
+                    ));
                 }
             }
         }
