@@ -1,10 +1,11 @@
 //! Shared utility functions
 
-/// Format bytes into human-readable sizes (B, KB, MB, GB)
+/// Format bytes into human-readable sizes using SI (1000-based) units.
+/// Matches parse_size so a round-trip through format/parse is consistent.
 pub fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = 1024 * KB;
-    const GB: u64 = 1024 * MB;
+    const KB: u64 = 1_000;
+    const MB: u64 = 1_000_000;
+    const GB: u64 = 1_000_000_000;
 
     if bytes >= GB {
         format!("{:.1} GB", bytes as f64 / GB as f64)
