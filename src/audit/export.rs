@@ -150,10 +150,12 @@ pub fn export_csv(result: &AuditResult, writer: &mut impl Write) -> Result<(), S
 
 fn truncate_path(path: &std::path::Path, max_len: usize) -> String {
     let s = path.to_string_lossy();
-    if s.len() <= max_len {
+    let char_count = s.chars().count();
+    if char_count <= max_len {
         s.to_string()
     } else {
-        format!("...{}", &s[s.len() - max_len + 3..])
+        let tail: String = s.chars().skip(char_count - max_len + 3).collect();
+        format!("...{tail}")
     }
 }
 

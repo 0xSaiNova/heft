@@ -104,8 +104,10 @@ fn render_hogs_view(frame: &mut Frame, area: Rect, state: &AppState) {
             };
 
             let path_str = path.to_string_lossy();
-            let display_path = if path_str.len() > 50 {
-                format!("...{}", &path_str[path_str.len() - 47..])
+            let char_count = path_str.chars().count();
+            let display_path = if char_count > 50 {
+                let tail: String = path_str.chars().skip(char_count - 47).collect();
+                format!("...{tail}")
             } else {
                 path_str.to_string()
             };

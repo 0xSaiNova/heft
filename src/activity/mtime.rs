@@ -1,7 +1,8 @@
 //! Source file modification time signal for activity detection.
 //!
 //! Samples source files breadth-first from a project root, skipping artifact
-//! directories. Returns the most recent mtime found within a configurable limit.
+//! directories. Bounded by both a file sample limit and a max directory depth
+//! to avoid deep traversal into large monorepos.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -12,12 +13,16 @@ use crate::scan::detector::{ARTIFACT_DIR_NAMES, SOURCE_EXTENSIONS};
 /// Priority directories to check first (highest signal for developer activity).
 const PRIORITY_DIRS: &[&str] = &["src", "lib", "app", "pkg"];
 
+/// Max directory depth to descend. Matches the original max_depth(3) constraint
+/// from projects.rs to avoid scanning deep into monorepos.
+const MAX_DEPTH: usize = 4;
+
 /// Sample up to `limit` source files breadth-first from root,
-/// skipping artifact directories. Returns the most recent mtime found.
+/// skipping artifact directories. Bounded to MAX_DEPTH levels deep.
 pub fn latest_source_mtime(root: &Path, limit: usize) -> Option<SystemTime> {
     let mut latest: Option<SystemTime> = None;
     let mut sampled = 0usize;
-    let mut queue = VecDeque::new();
+    let mut queue: VecDeque<(std::path::PathBuf, usize)> = VecDeque::new();
 
     // seed queue: priority directories first, then everything else
     let mut priority = Vec::new();
@@ -53,16 +58,16 @@ pub fn latest_source_mtime(root: &Path, limit: usize) -> Option<SystemTime> {
         }
     }
 
-    // enqueue priority dirs first for breadth-first traversal
+    // enqueue priority dirs first for breadth-first traversal (depth 1)
     for dir in priority {
-        queue.push_back(dir);
+        queue.push_back((dir, 1));
     }
     for dir in rest {
-        queue.push_back(dir);
+        queue.push_back((dir, 1));
     }
 
-    // breadth-first walk
-    while let Some(dir) = queue.pop_front() {
+    // breadth-first walk with depth limit
+    while let Some((dir, depth)) = queue.pop_front() {
         if sampled >= limit {
             break;
         }
@@ -79,10 +84,14 @@ pub fn latest_source_mtime(root: &Path, limit: usize) -> Option<SystemTime> {
             };
 
             if ft.is_dir() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if !ARTIFACT_DIR_NAMES.contains(&name_str.as_ref()) && !name_str.starts_with('.') {
-                    queue.push_back(entry.path());
+                if depth < MAX_DEPTH {
+                    let name = entry.file_name();
+                    let name_str = name.to_string_lossy();
+                    if !ARTIFACT_DIR_NAMES.contains(&name_str.as_ref())
+                        && !name_str.starts_with('.')
+                    {
+                        queue.push_back((entry.path(), depth + 1));
+                    }
                 }
             } else if ft.is_file() {
                 if let Some(mtime) = check_source_file(&entry.path()) {
@@ -154,5 +163,18 @@ mod tests {
     fn empty_dir_returns_none() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(latest_source_mtime(tmp.path(), 200).is_none());
+    }
+
+    #[test]
+    fn respects_depth_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        // create a source file deeper than MAX_DEPTH
+        let deep = tmp.path().join("a").join("b").join("c").join("d").join("e");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("deep.rs"), "// too deep").unwrap();
+
+        // should not find it since MAX_DEPTH is 4
+        let result = latest_source_mtime(tmp.path(), 200);
+        assert!(result.is_none());
     }
 }

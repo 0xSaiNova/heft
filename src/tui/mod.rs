@@ -21,26 +21,47 @@ use ratatui::Terminal;
 use crate::audit::AuditResult;
 use state::AppState;
 
+/// Restores the terminal on drop, even if the TUI panics or errors.
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = std::io::stdout().execute(LeaveAlternateScreen);
+    }
+}
+
 /// Launch the interactive TUI for browsing audit results.
 pub fn run_interactive(result: &AuditResult) -> Result<(), Box<dyn std::error::Error>> {
     let mut state = AppState::from_result(result);
 
-    // setup terminal
+    // setup terminal — guard ensures cleanup even on early error or panic
     enable_raw_mode()?;
+    let _guard = TerminalGuard;
     let mut stdout = std::io::stdout();
     stdout.execute(EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // main loop
+    let run_result = run_loop(&mut terminal, &mut state);
+
+    // guard handles cleanup on drop, but we still propagate any error
+    drop(_guard);
+    run_result
+}
+
+fn run_loop(
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    state: &mut AppState,
+) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         terminal.draw(|frame| {
-            views::render(frame, &state);
+            views::render(frame, state);
         })?;
 
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
-                // ctrl+c always quits
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                     break;
                 }
@@ -65,10 +86,6 @@ pub fn run_interactive(result: &AuditResult) -> Result<(), Box<dyn std::error::E
             break;
         }
     }
-
-    // restore terminal
-    disable_raw_mode()?;
-    std::io::stdout().execute(LeaveAlternateScreen)?;
 
     Ok(())
 }

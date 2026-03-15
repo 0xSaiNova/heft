@@ -99,7 +99,7 @@ pub fn classify_path(
     custom_rules: &[CustomRule],
 ) -> (AuditCategory, Option<String>) {
     // 1. dev artifact pattern match with parent file guards
-    if let Some(result) = classify_dev_artifact(path, dir_name) {
+    if let Some(result) = super::dev_artifacts::classify(path, dir_name) {
         return result;
     }
 
@@ -156,125 +156,6 @@ pub fn classify_path(
     (AuditCategory::Other, None)
 }
 
-/// Classify directories that are known build artifacts with parent file guards.
-/// Replicates the detection logic from projects.rs detect_artifact() as pure
-/// path checks without importing detector modules.
-fn classify_dev_artifact(path: &Path, dir_name: &str) -> Option<(AuditCategory, Option<String>)> {
-    let parent = path.parent()?;
-
-    match dir_name {
-        // node_modules: always a dev artifact (very low false positive risk)
-        "node_modules" => Some((AuditCategory::DevArtifacts, Some("node_modules".into()))),
-
-        // target: only if parent has Cargo.toml (avoids ~/Documents/target/ false positive)
-        "target" if parent.join("Cargo.toml").exists() => {
-            Some((AuditCategory::DevArtifacts, Some("Rust target".into())))
-        }
-
-        // python caches: low false positive risk, no guard needed
-        "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".tox" => {
-            Some((AuditCategory::DevArtifacts, Some(dir_name.into())))
-        }
-
-        // venv: only with python project markers
-        ".venv" | "venv" if has_python_project(parent) => {
-            Some((AuditCategory::DevArtifacts, Some("Python venv".into())))
-        }
-
-        // vendor: go or php
-        "vendor" if parent.join("go.mod").exists() => {
-            Some((AuditCategory::DevArtifacts, Some("Go vendor".into())))
-        }
-        "vendor" if parent.join("composer.json").exists() => {
-            Some((AuditCategory::DevArtifacts, Some("PHP vendor".into())))
-        }
-
-        // gradle
-        ".gradle" if has_gradle_project(parent) => {
-            Some((AuditCategory::DevArtifacts, Some("Gradle cache".into())))
-        }
-        "build" if has_gradle_project(parent) && is_gradle_build_dir(path) => {
-            Some((AuditCategory::DevArtifacts, Some("Gradle build".into())))
-        }
-
-        // xcode DerivedData: check if under ~/Library/Developer/Xcode/ or has xcode markers
-        "DerivedData" if is_xcode_derived_data(path) => Some((
-            AuditCategory::DevArtifacts,
-            Some("Xcode DerivedData".into()),
-        )),
-
-        // .NET bin/obj: only with project files
-        "bin" | "obj" if has_dotnet_project(parent) => {
-            Some((AuditCategory::DevArtifacts, Some(".NET build".into())))
-        }
-
-        _ => None,
-    }
-}
-
-fn has_python_project(dir: &Path) -> bool {
-    dir.join("requirements.txt").exists()
-        || dir.join("setup.py").exists()
-        || dir.join("pyproject.toml").exists()
-        || dir.join("setup.cfg").exists()
-}
-
-fn has_gradle_project(dir: &Path) -> bool {
-    dir.join("build.gradle").exists() || dir.join("build.gradle.kts").exists()
-}
-
-fn is_gradle_build_dir(path: &Path) -> bool {
-    path.join("classes").exists()
-        || path.join("libs").exists()
-        || path.join("tmp").exists()
-        || path.join("generated").exists()
-        || path.join("intermediates").exists()
-}
-
-fn is_xcode_derived_data(path: &Path) -> bool {
-    // check standard xcode cache location
-    let in_xcode_cache = path.ancestors().any(|ancestor| {
-        if let (Some(name), Some(parent)) = (ancestor.file_name(), ancestor.parent()) {
-            name.to_str() == Some("Xcode")
-                && parent
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(|s| s == "Developer")
-                    .unwrap_or(false)
-        } else {
-            false
-        }
-    });
-
-    let has_xcode_markers = path.join("Build").exists()
-        || path.join("Logs").exists()
-        || path.join("ModuleCache").exists()
-        || path.join("info.plist").exists();
-
-    in_xcode_cache || has_xcode_markers
-}
-
-fn has_dotnet_project(dir: &Path) -> bool {
-    if dir.join("Directory.Build.props").exists()
-        || dir.join("packages.config").exists()
-        || dir.join("NuGet.Config").exists()
-    {
-        return true;
-    }
-    std::fs::read_dir(dir)
-        .map(|entries| {
-            entries.flatten().any(|e| {
-                let name = e.file_name();
-                let s = name.to_str().unwrap_or("");
-                s.ends_with(".csproj")
-                    || s.ends_with(".fsproj")
-                    || s.ends_with(".vbproj")
-                    || s.ends_with(".sln")
-            })
-        })
-        .unwrap_or(false)
-}
-
 fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, Option<String>)> {
     let path_str = path.to_string_lossy();
 
@@ -309,7 +190,7 @@ fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, 
     let rel_str = rel.to_string_lossy();
 
     // dev caches (checked before general app data so they get DevArtifacts, not ApplicationData)
-    if let Some(result) = classify_dev_cache(&rel_str) {
+    if let Some(result) = super::dev_artifacts::classify_cache(&rel_str) {
         return Some(result);
     }
 
@@ -363,39 +244,6 @@ fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, 
     // cache (general, not already caught by dev cache patterns)
     if rel_str.starts_with(".cache") || rel_str.starts_with("Library/Caches") {
         return Some((AuditCategory::ApplicationData, Some("Cache".into())));
-    }
-
-    None
-}
-
-/// Classify known developer tool cache paths relative to home.
-fn classify_dev_cache(rel_str: &str) -> Option<(AuditCategory, Option<String>)> {
-    let checks: &[(&str, &str)] = &[
-        (".npm", "npm cache"),
-        (".cache/yarn", "yarn cache"),
-        ("Library/Caches/Yarn", "yarn cache"),
-        (".local/share/pnpm/store", "pnpm store"),
-        ("Library/pnpm/store", "pnpm store"),
-        (".cache/pip", "pip cache"),
-        ("Library/Caches/pip", "pip cache"),
-        (".cargo/registry", "cargo registry"),
-        (".cargo/git", "cargo git"),
-        ("go/pkg/mod", "go module cache"),
-        (".gradle/caches", "gradle cache"),
-        (".m2/repository", "maven cache"),
-        (".nuget/packages", "nuget cache"),
-        (".android/avd", "android AVD"),
-        (".android/cache", "android SDK cache"),
-        ("Library/Android/sdk", "android SDK"),
-        ("Android/Sdk", "android SDK"),
-        (".config/Code", "vscode data"),
-        ("Library/Application Support/Code", "vscode data"),
-    ];
-
-    for (prefix, subcategory) in checks {
-        if rel_str.starts_with(prefix) {
-            return Some((AuditCategory::DevArtifacts, Some((*subcategory).into())));
-        }
     }
 
     None
