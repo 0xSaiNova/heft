@@ -191,25 +191,36 @@ fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_ac
         return;
     }
 
-    let mut selected = ScanResult::empty();
-    selected.entries = entries;
-    let opts = clean::CleanOptions {
-        category_filter: None,
-        include_active,
-        stale_only: false,
-    };
-    let clean_result = clean::run(&selected, clean::CleanMode::Execute, opts);
-    for item in &clean_result.deleted {
-        println!("  {item}");
+    // delete entries one at a time with live feedback so the user
+    // sees progress. large directory trees (node_modules with 50k files)
+    // can take minutes — printing each deletion as it happens avoids
+    // the appearance of a frozen terminal.
+    let mut bytes_freed: u64 = 0;
+    let mut errors: Vec<String> = Vec::new();
+    let total = entries.len();
+    for (i, entry) in entries.iter().enumerate() {
+        eprint!("  [{}/{}] cleaning {}...", i + 1, total, entry.name);
+        let mut selected = ScanResult::empty();
+        selected.entries = vec![entry.clone()];
+        let opts = clean::CleanOptions {
+            category_filter: None,
+            include_active,
+            stale_only: false,
+        };
+        let result = clean::run(&selected, clean::CleanMode::Execute, opts);
+        if result.errors.is_empty() {
+            eprintln!(" \x1b[32mdone\x1b[0m");
+            bytes_freed += result.bytes_freed;
+        } else {
+            eprintln!(" \x1b[31mfailed\x1b[0m");
+            errors.extend(result.errors);
+        }
     }
-    for err in &clean_result.errors {
+    for err in &errors {
         eprintln!("  error: {err}");
     }
-    if clean_result.bytes_freed > 0 {
-        println!(
-            "\n  Freed {}",
-            crate::util::format_bytes(clean_result.bytes_freed)
-        );
+    if bytes_freed > 0 {
+        println!("\n  Freed {}", crate::util::format_bytes(bytes_freed));
     }
 }
 
