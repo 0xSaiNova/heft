@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod clean;
 pub mod cli;
 pub mod config;

@@ -5,6 +5,7 @@ use std::time::Duration;
 use directories::BaseDirs;
 use serde::Deserialize;
 
+use crate::activity::ActivityConfig;
 use crate::cli::{CleanArgs, ScanArgs};
 use crate::platform::{self, Platform};
 
@@ -33,11 +34,24 @@ struct FileDetectorsConfig {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
+struct FileActivityConfig {
+    window: Option<String>,
+    sample_limit: Option<usize>,
+    check_processes: Option<bool>,
+    enable_git: Option<bool>,
+    enable_mtime: Option<bool>,
+    protected_paths: Option<Vec<PathBuf>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileConfig {
     #[serde(default)]
     scan: FileScanConfig,
     #[serde(default)]
     detectors: FileDetectorsConfig,
+    #[serde(default)]
+    activity: FileActivityConfig,
 }
 
 fn load_file_config() -> Option<FileConfig> {
@@ -86,6 +100,24 @@ pub struct Config {
     pub verbose: bool,
     pub progressive: bool,
     pub platform: Platform,
+    pub activity: ActivityConfig,
+}
+
+fn build_activity_config(file: &FileActivityConfig) -> ActivityConfig {
+    let window = file
+        .window
+        .as_deref()
+        .and_then(|s| humantime::parse_duration(s).ok())
+        .unwrap_or(Duration::from_secs(7 * 24 * 3600));
+
+    ActivityConfig {
+        window,
+        sample_limit: file.sample_limit.unwrap_or(200),
+        check_processes: file.check_processes.unwrap_or(true),
+        enable_git: file.enable_git.unwrap_or(true),
+        enable_mtime: file.enable_mtime.unwrap_or(true),
+        protected_paths: file.protected_paths.clone().unwrap_or_default(),
+    }
 }
 
 impl Config {
@@ -151,6 +183,7 @@ impl Config {
             verbose,
             progressive,
             platform,
+            activity: build_activity_config(&file.activity),
         }
     }
 
@@ -189,6 +222,7 @@ impl Config {
             verbose,
             progressive: file.scan.progressive.unwrap_or(false),
             platform,
+            activity: build_activity_config(&file.activity),
         }
     }
 }
@@ -206,6 +240,7 @@ impl Default for Config {
             verbose: false,
             progressive: false,
             platform,
+            activity: ActivityConfig::default(),
         }
     }
 }

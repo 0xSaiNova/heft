@@ -45,6 +45,10 @@ chrono = "0.4"
 # toml parsing for config file (~/.config/heft/config.toml)
 toml = "0.8"
 
+# duration string parsing for activity window config ("7d", "24h", "2w")
+# tiny crate, no transitive deps, handles all standard duration formats
+humantime = "2"
+
 [dev-dependencies]
 # criterion for detailed benchmarking with statistical analysis
 # provides regression detection and comparison across runs
