@@ -78,12 +78,7 @@ pub fn run_default(cli: &Cli, config: Config) {
         let stale: Vec<_> = result
             .entries
             .iter()
-            .filter(|e| {
-                if !cli.include_active && e.active == Some(true) {
-                    return false;
-                }
-                e.staleness_score.unwrap_or(0.0) > 0.0
-            })
+            .filter(|e| crate::safety::should_preselect(e, cli.include_active))
             .cloned()
             .collect();
         if stale.is_empty() {
@@ -102,12 +97,7 @@ pub fn run_default(cli: &Cli, config: Config) {
             let stale: Vec<_> = result
                 .entries
                 .iter()
-                .filter(|e| {
-                    if !cli.include_active && e.active == Some(true) {
-                        return false;
-                    }
-                    e.staleness_score.unwrap_or(0.0) > 0.0
-                })
+                .filter(|e| crate::safety::should_preselect(e, cli.include_active))
                 .cloned()
                 .collect();
             if stale.is_empty() {

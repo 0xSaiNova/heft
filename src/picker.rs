@@ -27,15 +27,9 @@ pub fn run_picker(
     let mut cursor_pos: usize = 0;
     let mut scroll_offset: usize = 0;
 
-    // Pre-select stale items (staleness_score > 0 and respecting active filter)
+    // pre-select based on safety tiers: only Disposable + Rebuildable stale items
     for (i, e) in entries.iter().enumerate() {
-        if e.staleness_score.unwrap_or(0.0) <= 0.0 {
-            continue;
-        }
-        if e.active == Some(true) && !include_active {
-            continue;
-        }
-        selected[i] = true;
+        selected[i] = crate::safety::should_preselect(e, include_active);
     }
 
     let (_, term_rows) = terminal::size().unwrap_or((80, 24));
@@ -213,10 +207,7 @@ pub fn run_picker(
                 }
                 KeyCode::Char('a') => {
                     for (i, e) in entries.iter().enumerate() {
-                        if e.staleness_score.unwrap_or(0.0) > 0.0 {
-                            if e.active == Some(true) && !include_active {
-                                continue;
-                            }
+                        if crate::safety::should_preselect(e, include_active) {
                             selected[i] = true;
                         }
                     }
