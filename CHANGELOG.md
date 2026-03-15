@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-15
+
+### Added
+- Bare `heft` invocation: scan, find big files, rank by staleness, interactive picker or `--auto` cleanup
+- Staleness scoring that ranks items by size times age
+- Safety tiers (Disposable, Rebuildable, Caution, UserData) with git status checks per project
+- Activity detection via git recency, source file mtime, and running process signals
+- Active project protection: projects with recent commits, edits, or running processes are never auto cleaned
+- `heft audit` command with parallel filesystem walker, 10 category classification, TUI, and JSON/CSV export
+- Interactive picker with pre selection of safe stale items and running byte total
+- Big file discovery with mount boundary filtering and symlink safety
+- `--stale` flag on `heft clean` to target only stale entries
+- `--sort staleness` on `heft scan` for flat ranked output
+- `--include-active`, `--active-window`, `--min-size`, `--auto`, `--dry-run` flags
+- Protected paths and custom audit rules in config file
+- Database migrations v1 through v4 with staleness and safety columns persisted to SQLite
+- VS Code cache detection scoped to safe subdirectories only
+
+### Fixed
+- Staleness scoring inversion where fresh items scored higher than stale ones
+- Config parsing failure when adding a `[staleness]` section to config.toml
+- Panic on non ASCII paths in picker truncation
+- `heft scan --json --sort staleness` silently ignored `--json`
+- Big file entries inside active projects had no activity protection
+- Picker cursor drift on WSL terminals
+- Double key events on WSL from crossterm Press/Repeat/Release
+- Path validation rejected macOS temp directories under `/var/folders`
+- UTF-8 path panic in TUI terminal restore
+- Clean engine mislabeled filtered entries as protected
+- `format_bytes` used 1024 based units while `parse_size` used 1000 based
+
 ## [0.5.0] - 2026-02-23
 
 ### Added
