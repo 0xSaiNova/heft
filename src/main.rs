@@ -1,4 +1,5 @@
 use clap::Parser;
+use heft::audit;
 use heft::clean;
 use heft::cli::{CleanCategory, Cli, Command};
 use heft::config::Config;
@@ -424,6 +425,49 @@ fn main() {
             );
 
             print_diff(&diff_result);
+        }
+        Command::Audit(args) => {
+            let roots = args
+                .roots
+                .unwrap_or_else(|| {
+                    heft::platform::home_dir()
+                        .map(|h| vec![h])
+                        .unwrap_or_default()
+                });
+
+            let config = audit::AuditConfig {
+                roots,
+                cross_mount: args.cross_mount,
+                export: args.export.clone(),
+                save: args.save,
+                ..Default::default()
+            };
+
+            let result = audit::run(&config);
+
+            match args.export.as_deref() {
+                Some("json") => {
+                    let mut stdout = std::io::stdout().lock();
+                    if let Err(e) = audit::export::export_json(&result, &mut stdout) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                Some("csv") => {
+                    let mut stdout = std::io::stdout().lock();
+                    if let Err(e) = audit::export::export_csv(&result, &mut stdout) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                Some(fmt) => {
+                    eprintln!("Unknown export format: '{fmt}'. Use 'json' or 'csv'.");
+                    std::process::exit(1);
+                }
+                None => {
+                    audit::export::print_summary(&result);
+                }
+            }
         }
     }
 }

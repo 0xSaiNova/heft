@@ -5,6 +5,7 @@
 //! or saved to SQLite for historical comparison.
 
 pub mod categories;
+pub mod export;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
