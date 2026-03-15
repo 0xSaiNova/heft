@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Known dev process names that strongly indicate active development.
+#[cfg(target_os = "linux")]
 const DEV_PROCESSES: &[&str] = &[
     "node", "cargo", "rustc", "gradle", "python", "python3", "webpack", "vite", "next", "dotnet",
     "go", "flask", "uvicorn",
