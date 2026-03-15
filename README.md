@@ -1,141 +1,95 @@
 # heft
 
-**you probably have 20+ GB of garbage on your machine right now.**
+**You probably have 20+ GB of build junk on your machine right now.**
 
-build artifacts, docker layers, package caches, old node_modules from projects you haven't touched in a year. heft finds all of it in ~3 seconds and lets you clean it up without guessing.
+Old node_modules, cargo targets, docker layers, package caches. heft finds all of it in seconds, ranks it by how stale it is, and lets you clean it up safely.
 
-**with cargo:**
+## Install
 
 ```bash
 git clone https://github.com/0xSaiNova/heft.git
 cd heft && cargo install --path .
 ```
 
-**without cargo** — install Rust first (takes ~1 min), then run the above:
+Need Rust first? Takes about a minute.
 
 ```bash
-# macOS / Linux
+# macOS and Linux
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ```powershell
-# Windows — run in PowerShell
+# Windows (PowerShell)
 winget install Rustlang.Rustup
 ```
 
-Restart your terminal after installing Rust, then run the `cargo install` line above.
+Restart your terminal after installing Rust, then run the cargo install line above.
 
----
+## Usage
 
-## run it
-
-```
-$ heft scan
-
-Category            Name                          Size       Reclaimable  Age
-─────────────────────────────────────────────────────────────────────────────────
-Project Artifacts   node_modules (old-project)     2.1 GB     2.1 GB      120d
-                    target (rust-experiments)      890 MB     890 MB       45d
-                    .venv (ml-pipeline)            340 MB     340 MB       90d
-
-Package Cache       npm cache                      3.2 GB     3.2 GB
-                    cargo registry                 1.8 GB     1.8 GB
-                    pip cache                      640 MB     640 MB
-
-Container Data      docker images                  7.3 GB     4.1 GB
-                    docker build cache             2.8 GB     2.8 GB
-
-Total: 20.3 GB found, 16.8 GB reclaimable
-Scan completed in 3.12s (peak memory: 27.4 MB)
-```
-
-## clean it up
-
-```
-$ heft clean
-
-Project Artifacts: 3.3 GB (3 items)
-  Delete? [y/n]: y
-
-Package Cache: 5.6 GB (3 items)
-  Delete? [y/n]: n
-
-Container Data: 7.8 GB (3 items)
-  Delete? [y/n]: y
-
-Freed 11.1 GB
-```
-
-interactive by default — you approve each category before anything gets deleted. no surprises.
+Just run `heft` with no arguments. It scans your home directory, ranks everything by staleness, and gives you three choices: pick items interactively, auto clean all stale items, or quit.
 
 ```bash
-heft clean --dry-run                        # see exactly what would go
-heft clean --yes                            # skip prompts, delete everything
-heft clean --category project-artifacts     # only clean one category
-heft clean --roots ~/code --no-docker       # control what gets scanned first
+heft                          # interactive scan and clean
+heft scan                     # scan only, no cleanup
+heft scan --sort staleness    # rank results by age x size
+heft clean                    # interactive cleanup by category
+heft clean --stale            # only target stale entries
+heft clean --dry-run          # preview what would be deleted
+heft audit                    # full drive audit with TUI explorer
 ```
 
-## watch your disk over time
-
-every scan saves automatically. no setup.
-
-```
-$ heft diff
-
-Package Cache:
-  [+] npm cache grew 1.2 GB -> 1.8 GB (+600 MB)
-  [-] cargo registry shrank 2.1 GB -> 1.4 GB (-700 MB)
-
-Project Artifacts:
-  [new] node_modules (new-project) appeared (450 MB)
-  [gone] target (old-experiment) cleaned up (was 890 MB)
-
-Net change: 540 MB freed
-```
+Every scan saves to a local SQLite database automatically. Compare any two snapshots to see what changed.
 
 ```bash
-heft report --list          # see all saved snapshots
-heft report --id 3          # replay any past scan
-heft diff --from 1 --to 5   # compare any two
+heft diff                     # compare last two scans
+heft report --list            # list all saved snapshots
+heft report --id 3            # view a specific snapshot
 ```
 
-## what it finds
+## What it finds
 
-| | |
+| Category | Detected |
 |---|---|
-| **project artifacts** | `node_modules`, `target`, `.venv`, `bin`/`obj` (.NET), gradle/maven builds, Xcode DerivedData |
-| **package caches** | npm, yarn, pnpm, pip, cargo, homebrew, go modules, maven, gradle, NuGet |
-| **docker** | images, containers, volumes, build cache, Desktop VM disk files, WSL2 virtual disks |
-| **IDE data** | VSCode, Android AVD emulator images, Android SDK |
+| **Project artifacts** | `node_modules`, `target`, `.venv`, `__pycache__`, `vendor`, `bin`/`obj` (.NET), gradle/maven builds, Xcode DerivedData |
+| **Package caches** | npm, yarn, pnpm, pip, cargo, homebrew, go modules, maven, gradle, NuGet |
+| **Docker** | images, containers, volumes, build cache, Desktop VM disk (macOS), WSL2 virtual disks (Windows) |
+| **IDE data** | VSCode caches, Android AVD images, Android SDK |
 
-## config file
+## Safety
 
-persistent settings in `~/.config/heft/config.toml` — CLI flags always override:
+Active projects are protected by default. heft checks git recency, file modification times, and running processes before recommending anything for cleanup. Each entry gets a safety tier (disposable, rebuildable, caution, or user data) and only the safe tiers are eligible for automatic cleanup.
+
+Every deletion path is validated: must be absolute, must be under your home directory, symlinks are never followed. Nothing happens without your confirmation unless you pass `--yes` or `--auto`.
+
+## Config
+
+Persistent settings go in `~/.config/heft/config.toml`. CLI flags always take priority.
 
 ```toml
 [scan]
-roots = ["/home/you/code"]
-timeout = 60
+roots = ["~/code"]
 verbose = true
 
 [detectors]
-docker = false   # skip docker entirely
-xcode = false    # skip xcode on this machine
+docker = false
+xcode = false
+
+[staleness]
+default_factor = 3.0
+
+[activity]
+window = "7d"
 ```
 
-## scripting
+## Scripting
 
 ```bash
 heft scan --json | jq '.entries[] | select(.size_bytes > 1073741824)'
-heft scan --progressive          # stream results as each detector finishes
-heft scan --verbose              # show per-detector timing and diagnostics
-heft scan --disable docker,xcode # skip specific detectors for one run
+heft scan --progressive       # stream results as detectors finish
+heft clean --yes              # skip all prompts
+heft --auto --min-size 500MB  # auto clean stale items above 500 MB
+heft audit --export csv       # export full audit to csv
 ```
-
-## safety
-
-never touches source files. validates every path before deletion (must be absolute, under home). refuses to follow symlinks. interactive by default.
-
----
 
 MIT license
