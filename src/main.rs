@@ -123,6 +123,24 @@ fn print_diff(result: &DiffResult) {
     }
 }
 
+/// Check if stdout is a terminal (for TUI decision).
+#[cfg(feature = "tui")]
+fn atty_check() -> bool {
+    // crossterm (already a dependency) can tell us if we're in a terminal
+    // but the simplest approach: try to use the same FFI as spinner.rs
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn isatty(fd: i32) -> i32;
+        }
+        unsafe { isatty(1) != 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -465,7 +483,24 @@ fn main() {
                     std::process::exit(1);
                 }
                 None => {
-                    audit::export::print_summary(&result);
+                    #[cfg(feature = "tui")]
+                    {
+                        // launch TUI if stdout is a terminal
+                        if atty_check() {
+                            if let Err(e) = heft::tui::run_interactive(&result) {
+                                eprintln!("TUI error: {e}");
+                                // fallback to summary
+                                audit::export::print_summary(&result);
+                            }
+                        } else {
+                            audit::export::print_summary(&result);
+                        }
+                    }
+
+                    #[cfg(not(feature = "tui"))]
+                    {
+                        audit::export::print_summary(&result);
+                    }
                 }
             }
         }
