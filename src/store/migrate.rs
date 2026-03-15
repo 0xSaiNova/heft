@@ -5,7 +5,7 @@
 
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 3;
+const CURRENT_VERSION: i64 = 4;
 
 /// Run any pending migrations. Called on every Store::open().
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
@@ -19,6 +19,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     }
     if version < 3 {
         migrate_v3(conn)?;
+    }
+    if version < 4 {
+        migrate_v4(conn)?;
     }
 
     if version < CURRENT_VERSION {
@@ -90,6 +93,28 @@ fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
                 // column already exists (fresh db with init_schema), safe to skip
             } else {
                 return Err(e);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// v4: add safety tier columns to entries table.
+fn migrate_v4(conn: &Connection) -> rusqlite::Result<()> {
+    for sql in [
+        "ALTER TABLE entries ADD COLUMN safety_tier TEXT DEFAULT NULL",
+        "ALTER TABLE entries ADD COLUMN safety_reason TEXT DEFAULT NULL",
+        "ALTER TABLE entries ADD COLUMN git_dirty_files INTEGER DEFAULT NULL",
+    ] {
+        match conn.execute(sql, []) {
+            Ok(_) => {}
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("duplicate column") {
+                    // already exists, safe to skip
+                } else {
+                    return Err(e);
+                }
             }
         }
     }

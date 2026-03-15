@@ -161,6 +161,8 @@ fn main() {
                 });
             }
 
+            heft::safety::classify_all(&mut result.entries);
+
             match Store::open() {
                 Ok(mut store) => {
                     if let Err(e) = store.save_snapshot(&result) {
@@ -306,7 +308,8 @@ fn main() {
                 }
             }
 
-            let scan_result = scan::run(&config);
+            let mut scan_result = scan::run(&config);
+            heft::safety::classify_all(&mut scan_result.entries);
 
             let mode = if args.dry_run {
                 clean::CleanMode::DryRun

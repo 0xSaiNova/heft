@@ -50,6 +50,9 @@ pub fn run_default(cli: &Cli, config: Config) {
         sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    // classify safety tiers (includes git status checks for project artifacts)
+    crate::safety::classify_all(&mut result.entries);
+
     // save snapshot
     if let Ok(mut store) = Store::open() {
         let _ = store.save_snapshot(&result);
