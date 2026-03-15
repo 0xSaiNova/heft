@@ -150,6 +150,8 @@ mod tests {
             reclaimable_bytes: size,
             last_modified: None,
             cleanup_hint: None,
+            active: None,
+            active_reason: None,
         }
     }
 

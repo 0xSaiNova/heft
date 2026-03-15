@@ -103,6 +103,8 @@ fn scan_directory(
                         reclaimable_bytes: size,
                         last_modified,
                         cleanup_hint: Some(artifact.cleanup_hint.to_string()),
+                        active: None,
+                        active_reason: None,
                     });
 
                     seen_projects.insert(project_root.to_path_buf());
@@ -413,9 +415,6 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
 // used to identify stale projects that havent been touched in a while.
 fn get_source_last_modified(project_root: &Path) -> Option<i64> {
     let mut latest: Option<SystemTime> = None;
-    let source_extensions = [
-        "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift", "cs", "fs", "vb",
-    ];
 
     // only check top few levels, dont need to go deep.
     // filter_entry prunes descent into artifact directories entirely, not just
@@ -431,19 +430,7 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
             }
             e.file_name()
                 .to_str()
-                .map(|s| {
-                    !matches!(
-                        s,
-                        "node_modules"
-                            | "target"
-                            | ".venv"
-                            | "venv"
-                            | "vendor"
-                            | "__pycache__"
-                            | "build"
-                            | "dist"
-                    )
-                })
+                .map(|s| !super::detector::ARTIFACT_DIR_NAMES.contains(&s))
                 .unwrap_or(true)
         })
         .filter_map(|e| e.ok())
@@ -453,7 +440,7 @@ fn get_source_last_modified(project_root: &Path) -> Option<i64> {
                 .path()
                 .extension()
                 .and_then(|e| e.to_str())
-                .map(|ext| source_extensions.contains(&ext))
+                .map(|ext| super::detector::SOURCE_EXTENSIONS.contains(&ext))
                 .unwrap_or(false);
 
             if is_source {

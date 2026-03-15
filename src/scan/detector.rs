@@ -53,7 +53,22 @@ pub struct BloatEntry {
     pub reclaimable_bytes: u64,
     pub last_modified: Option<i64>,
     pub cleanup_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_reason: Option<String>,
 }
+
+/// Source file extensions used for activity detection and last-modified scanning.
+pub const SOURCE_EXTENSIONS: &[&str] = &[
+    "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift", "cs", "fs", "vb",
+];
+
+/// Known artifact directory names that should be skipped during source file walks.
+pub const ARTIFACT_DIR_NAMES: &[&str] = &[
+    "node_modules", "target", ".venv", "venv", "vendor", "__pycache__",
+    "build", "dist", ".gradle", "bin", "obj", "DerivedData",
+];
 
 pub struct DetectorResult {
     pub entries: Vec<BloatEntry>,

@@ -176,6 +176,8 @@ fn run_docker_system_df(config: &Config) -> Result<Vec<BloatEntry>, String> {
             reclaimable_bytes,
             last_modified: None,
             cleanup_hint: Some(get_cleanup_hint(&df_entry.type_)),
+            active: None,
+            active_reason: None,
         });
     }
 
@@ -303,6 +305,8 @@ fn detect_docker_desktop_vm(config: &Config) -> Option<BloatEntry> {
         reclaimable_bytes: 0, // we can't determine reclaimable size without analyzing the VM
         last_modified: None,  // timestamp not needed for VM disk
         cleanup_hint: Some(cleanup_hint),
+        active: None,
+        active_reason: None,
     })
 }
 

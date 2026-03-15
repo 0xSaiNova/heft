@@ -58,6 +58,8 @@ impl Detector for XcodeDetector {
                         cleanup_hint: Some(
                             "safe to delete, Xcode rebuilds on next build. or: Xcode → Settings → Locations → Derived Data → arrow button".to_string()
                         ),
+                        active: None,
+                        active_reason: None,
                     }],
                     diagnostics,
                 }
