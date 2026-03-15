@@ -451,12 +451,15 @@ fn main() {
                     .unwrap_or_default()
             });
 
+            let (custom_rules, min_size) = heft::config::load_audit_config();
+
             let config = audit::AuditConfig {
                 roots,
                 cross_mount: args.cross_mount,
+                min_entry_size: min_size.unwrap_or(10 * 1024 * 1024),
+                custom_rules,
                 export: args.export.clone(),
                 save: args.save,
-                ..Default::default()
             };
 
             let result = audit::run(&config);

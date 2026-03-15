@@ -45,6 +45,22 @@ struct FileActivityConfig {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
+struct FileAuditConfig {
+    rules: Option<Vec<FileAuditRule>>,
+    min_entry_size: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileAuditRule {
+    path_contains: Option<String>,
+    extension: Option<Vec<String>>,
+    category: String,
+    subcategory: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileConfig {
     #[serde(default)]
     scan: FileScanConfig,
@@ -52,6 +68,48 @@ struct FileConfig {
     detectors: FileDetectorsConfig,
     #[serde(default)]
     activity: FileActivityConfig,
+    #[serde(default)]
+    audit: FileAuditConfig,
+}
+
+/// Load audit custom rules and min_entry_size from config file.
+pub fn load_audit_config() -> (Vec<crate::audit::categories::CustomRule>, Option<u64>) {
+    let file = load_file_config().unwrap_or_default();
+    let rules = file
+        .audit
+        .rules
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|r| {
+            let category = crate::audit::categories::AuditCategory::from_str(&r.category)?;
+            Some(crate::audit::categories::CustomRule {
+                path_contains: r.path_contains,
+                extension: r.extension,
+                category,
+                subcategory: r.subcategory,
+            })
+        })
+        .collect();
+
+    let min_size = file.audit.min_entry_size.and_then(|s| parse_byte_size(&s));
+
+    (rules, min_size)
+}
+
+fn parse_byte_size(s: &str) -> Option<u64> {
+    let s = s.trim();
+    let (num_str, multiplier) = if let Some(n) = s.strip_suffix("GB") {
+        (n.trim(), 1_000_000_000u64)
+    } else if let Some(n) = s.strip_suffix("MB") {
+        (n.trim(), 1_000_000u64)
+    } else if let Some(n) = s.strip_suffix("KB") {
+        (n.trim(), 1_000u64)
+    } else if let Some(n) = s.strip_suffix('B') {
+        (n.trim(), 1u64)
+    } else {
+        (s, 1u64)
+    };
+    num_str.parse::<u64>().ok().map(|n| n * multiplier)
 }
 
 fn load_file_config() -> Option<FileConfig> {

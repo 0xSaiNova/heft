@@ -64,6 +64,7 @@ pub struct AuditResult {
     pub duration: Duration,
     pub errors: Vec<String>,
     pub top_dirs: Vec<(PathBuf, u64, AuditCategory)>,
+    pub active_dirs: HashMap<PathBuf, (bool, Option<String>)>,
 }
 
 /// Pseudo-filesystems that should always be skipped during audit.
@@ -169,6 +170,9 @@ pub fn run(config: &AuditConfig) -> AuditResult {
     top_dirs.sort_by(|a, b| b.1.cmp(&a.1));
     top_dirs.truncate(20);
 
+    // run activity checks on dev artifact directories
+    let active_dirs = check_dev_artifact_activity(&top_dirs);
+
     AuditResult {
         by_category,
         total_bytes,
@@ -178,5 +182,46 @@ pub fn run(config: &AuditConfig) -> AuditResult {
         duration: start.elapsed(),
         errors,
         top_dirs,
+        active_dirs,
     }
+}
+
+fn check_dev_artifact_activity(
+    top_dirs: &[(PathBuf, u64, AuditCategory)],
+) -> HashMap<PathBuf, (bool, Option<String>)> {
+    use crate::activity::{self, ActivityConfig};
+    use crate::scan::detector::{BloatCategory, BloatEntry, Location};
+
+    let dev_dirs: Vec<&(PathBuf, u64, AuditCategory)> = top_dirs
+        .iter()
+        .filter(|(_, _, cat)| *cat == AuditCategory::DevArtifacts)
+        .collect();
+
+    if dev_dirs.is_empty() {
+        return HashMap::new();
+    }
+
+    // build stub BloatEntries for the activity checker (it only looks at location)
+    let stubs: Vec<BloatEntry> = dev_dirs
+        .iter()
+        .map(|(path, size, _)| BloatEntry {
+            category: BloatCategory::ProjectArtifacts,
+            name: String::new(),
+            location: Location::FilesystemPath(path.clone()),
+            size_bytes: *size,
+            reclaimable_bytes: 0,
+            last_modified: None,
+            cleanup_hint: None,
+            active: None,
+            active_reason: None,
+        })
+        .collect();
+
+    let results = activity::check(&stubs, &ActivityConfig::default());
+
+    dev_dirs
+        .iter()
+        .zip(results.iter())
+        .map(|((path, _, _), ar)| (path.clone(), (ar.active, ar.reason.clone())))
+        .collect()
 }

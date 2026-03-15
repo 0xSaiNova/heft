@@ -38,6 +38,22 @@ impl AuditCategory {
         }
     }
 
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Dev Artifacts" => Some(AuditCategory::DevArtifacts),
+            "Media" => Some(AuditCategory::Media),
+            "Documents" => Some(AuditCategory::Documents),
+            "Downloads" => Some(AuditCategory::Downloads),
+            "Logs" => Some(AuditCategory::Logs),
+            "Application Data" => Some(AuditCategory::ApplicationData),
+            "Version Control" => Some(AuditCategory::VersionControl),
+            "System" => Some(AuditCategory::System),
+            "Trash / Temp" => Some(AuditCategory::TrashTemp),
+            "Other" => Some(AuditCategory::Other),
+            _ => None,
+        }
+    }
+
     pub fn sort_order(&self) -> u8 {
         match self {
             AuditCategory::DevArtifacts => 0,
