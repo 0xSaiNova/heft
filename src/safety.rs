@@ -6,11 +6,14 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
 use crate::scan::detector::{BloatCategory, BloatEntry, Location};
+
+/// max time to wait for a single git status call before giving up
+const GIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SafetyTier {
@@ -60,24 +63,47 @@ pub struct SafetyInfo {
 /// check if a git repo has uncommitted changes.
 /// returns None if not a git repo or git unavailable.
 /// returns Some(0) if clean, Some(n) if n files changed.
+/// times out after GIT_TIMEOUT to avoid hanging on slow disks.
 pub fn check_git_status(project_root: &Path) -> Option<u32> {
     if !project_root.join(".git").exists() {
         return None;
     }
 
-    let output = Command::new("git")
+    let mut child = Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(project_root)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
         .ok()?;
 
-    if !output.status.success() {
-        return None;
+    let deadline = std::time::Instant::now() + GIT_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return None;
+                }
+                let stdout = child.stdout.take()?;
+                use std::io::Read;
+                let mut buf = String::new();
+                std::io::BufReader::new(stdout)
+                    .read_to_string(&mut buf)
+                    .ok()?;
+                let count = buf.lines().filter(|l| !l.is_empty()).count() as u32;
+                return Some(count);
+            }
+            Ok(None) => {
+                if std::time::Instant::now() > deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => return None,
+        }
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let count = stdout.lines().filter(|l| !l.is_empty()).count() as u32;
-    Some(count)
 }
 
 /// shared classification for project artifacts given a pre-fetched git status.
@@ -148,7 +174,16 @@ pub fn classify_safety(entry: &BloatEntry) -> SafetyInfo {
 }
 
 /// classify all entries in bulk, deduplicating git status checks per project root.
+/// shows a spinner when running interactively since git checks can be slow.
 pub fn classify_all(entries: &mut [BloatEntry]) {
+    use std::io::IsTerminal;
+
+    let spinner = if std::io::stderr().is_terminal() {
+        crate::spinner::Spinner::start("Checking git status...")
+    } else {
+        None
+    };
+
     let mut git_cache: HashMap<PathBuf, Option<u32>> = HashMap::new();
 
     for entry in entries.iter_mut() {
@@ -175,6 +210,10 @@ pub fn classify_all(entries: &mut [BloatEntry]) {
             _ => classify_safety(entry),
         };
         entry.safety = Some(info);
+    }
+
+    if let Some(sp) = spinner {
+        sp.stop();
     }
 }
 
