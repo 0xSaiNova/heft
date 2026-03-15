@@ -38,7 +38,7 @@ impl AuditCategory {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_label(s: &str) -> Option<Self> {
         match s {
             "Dev Artifacts" => Some(AuditCategory::DevArtifacts),
             "Media" => Some(AuditCategory::Media),

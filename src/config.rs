@@ -81,7 +81,7 @@ pub fn load_audit_config() -> (Vec<crate::audit::categories::CustomRule>, Option
         .unwrap_or_default()
         .into_iter()
         .filter_map(|r| {
-            let category = crate::audit::categories::AuditCategory::from_str(&r.category)?;
+            let category = crate::audit::categories::AuditCategory::parse_label(&r.category)?;
             Some(crate::audit::categories::CustomRule {
                 path_contains: r.path_contains,
                 extension: r.extension,

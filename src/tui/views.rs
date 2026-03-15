@@ -77,7 +77,7 @@ fn render_category_view(frame: &mut Frame, area: Rect, state: &AppState) {
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{:<20}", cat.label()), style),
                 Span::styled(format!("{:>10}", format_bytes(*size)), style),
-                Span::styled(format!(" {:>5.1}% ", pct), style),
+                Span::styled(format!(" {pct:>5.1}% "), style),
                 Span::styled(bar, Style::default().fg(Color::Cyan)),
             ]))
         })
@@ -112,7 +112,7 @@ fn render_hogs_view(frame: &mut Frame, area: Rect, state: &AppState) {
 
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{:>3}. ", i + 1), style),
-                Span::styled(format!("{:<50}", display_path), style),
+                Span::styled(format!("{display_path:<50}"), style),
                 Span::styled(format!("{:>10}", format_bytes(*size)), style),
                 Span::styled(
                     format!("  [{}]", cat.label()),
@@ -146,7 +146,7 @@ fn render_tree_view(frame: &mut Frame, area: Rect, state: &AppState) {
             let path_str = path.to_string_lossy();
 
             ListItem::new(Line::from(vec![
-                Span::styled(format!("{:<55}", path_str), style),
+                Span::styled(format!("{path_str:<55}"), style),
                 Span::styled(format!("{:>10}", format_bytes(*size)), style),
                 Span::styled(
                     format!("  {}", cat.label()),
