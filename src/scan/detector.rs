@@ -11,6 +11,7 @@ pub enum BloatCategory {
     IdeData,
     SystemCache,
     Other,
+    LargeFile,
 }
 
 impl BloatCategory {
@@ -22,6 +23,7 @@ impl BloatCategory {
             BloatCategory::IdeData => "IdeData",
             BloatCategory::SystemCache => "SystemCache",
             BloatCategory::Other => "Other",
+            BloatCategory::LargeFile => "LargeFile",
         }
     }
 
@@ -33,6 +35,7 @@ impl BloatCategory {
             BloatCategory::IdeData => "IDE Data",
             BloatCategory::SystemCache => "System Cache",
             BloatCategory::Other => "Other",
+            BloatCategory::LargeFile => "Large Files",
         }
     }
 }
@@ -57,6 +60,8 @@ pub struct BloatEntry {
     pub active: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staleness_score: Option<f64>,
 }
 
 /// Source file extensions used for activity detection and last-modified scanning.

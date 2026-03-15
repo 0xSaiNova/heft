@@ -2,45 +2,83 @@ name: CI
 
 on:
   push:
-    branches: [main, dev, "p8/**"]
+    branches: [main, dev, "feat/**"]
   pull_request:
     branches: [main, dev]
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  build-and-test:
-    name: Build & Test (${{ matrix.os }})
+  # format and lint are platform-independent, run once on linux
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy (${{ matrix.features_name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features_name: [default, no-tui]
+        include:
+          - features_name: default
+            cargo_flags: ""
+          - features_name: no-tui
+            cargo_flags: "--no-default-features"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: clippy-${{ matrix.features_name }}
+      - run: cargo clippy --all-targets ${{ matrix.cargo_flags }} -- -D warnings
+
+  test:
+    name: Test (${{ matrix.os }}, ${{ matrix.features_name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-
+        features_name: [default, no-tui]
+        include:
+          - features_name: default
+            cargo_flags: ""
+          - features_name: no-tui
+            cargo_flags: "--no-default-features"
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          components: rustfmt, clippy
+          key: ${{ matrix.os }}-${{ matrix.features_name }}
+      - run: cargo test ${{ matrix.cargo_flags }}
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-
-      - name: Build
+          key: ${{ matrix.os }}-release
+      - name: Build (default features)
         run: cargo build --release
-
-      - name: Test
-        run: cargo test
+      - name: Build (no default features)
+        run: cargo build --release --no-default-features

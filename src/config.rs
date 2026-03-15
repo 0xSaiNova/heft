@@ -70,6 +70,50 @@ struct FileConfig {
     activity: FileActivityConfig,
     #[serde(default)]
     audit: FileAuditConfig,
+    #[serde(default)]
+    staleness: Option<StalenessConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct StalenessConfig {
+    pub brackets: Vec<StalenessBracket>,
+    pub default_factor: f64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct StalenessBracket {
+    pub days: u64,
+    pub factor: f64,
+}
+
+impl Default for StalenessConfig {
+    fn default() -> Self {
+        StalenessConfig {
+            brackets: vec![
+                StalenessBracket {
+                    days: 0,
+                    factor: 0.0,
+                },
+                StalenessBracket {
+                    days: 7,
+                    factor: 0.0,
+                },
+                StalenessBracket {
+                    days: 30,
+                    factor: 0.5,
+                },
+                StalenessBracket {
+                    days: 90,
+                    factor: 1.0,
+                },
+                StalenessBracket {
+                    days: 180,
+                    factor: 2.0,
+                },
+            ],
+            default_factor: 3.0,
+        }
+    }
 }
 
 /// Load audit custom rules and min_entry_size from config file.
@@ -91,25 +135,12 @@ pub fn load_audit_config() -> (Vec<crate::audit::categories::CustomRule>, Option
         })
         .collect();
 
-    let min_size = file.audit.min_entry_size.and_then(|s| parse_byte_size(&s));
+    let min_size = file
+        .audit
+        .min_entry_size
+        .and_then(|s| crate::util::parse_size(&s).ok());
 
     (rules, min_size)
-}
-
-fn parse_byte_size(s: &str) -> Option<u64> {
-    let s = s.trim();
-    let (num_str, multiplier) = if let Some(n) = s.strip_suffix("GB") {
-        (n.trim(), 1_000_000_000u64)
-    } else if let Some(n) = s.strip_suffix("MB") {
-        (n.trim(), 1_000_000u64)
-    } else if let Some(n) = s.strip_suffix("KB") {
-        (n.trim(), 1_000u64)
-    } else if let Some(n) = s.strip_suffix('B') {
-        (n.trim(), 1u64)
-    } else {
-        (s, 1u64)
-    };
-    num_str.parse::<u64>().ok().map(|n| n * multiplier)
 }
 
 fn load_file_config() -> Option<FileConfig> {
@@ -159,6 +190,7 @@ pub struct Config {
     pub progressive: bool,
     pub platform: Platform,
     pub activity: ActivityConfig,
+    pub staleness: Option<StalenessConfig>,
 }
 
 fn build_activity_config(file: &FileActivityConfig) -> ActivityConfig {
@@ -181,6 +213,24 @@ fn build_activity_config(file: &FileActivityConfig) -> ActivityConfig {
 impl Config {
     pub fn is_detector_enabled(&self, name: &str) -> bool {
         !self.disabled_detectors.contains(name)
+    }
+
+    pub fn from_bare_cli(roots: Option<Vec<PathBuf>>) -> Self {
+        let file = load_file_config().unwrap_or_default();
+        let platform = platform::detect();
+        let roots =
+            roots.unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
+        Config {
+            roots,
+            timeout: Duration::from_secs(file.scan.timeout.unwrap_or(30)),
+            disabled_detectors: disabled_from_file(&file.detectors),
+            json_output: false,
+            verbose: false,
+            progressive: false,
+            platform,
+            activity: build_activity_config(&file.activity),
+            staleness: file.staleness.clone(),
+        }
     }
 
     pub fn from_scan_args(args: &ScanArgs) -> Self {
@@ -242,6 +292,7 @@ impl Config {
             progressive,
             platform,
             activity: build_activity_config(&file.activity),
+            staleness: file.staleness.clone(),
         }
     }
 
@@ -281,6 +332,7 @@ impl Config {
             progressive: file.scan.progressive.unwrap_or(false),
             platform,
             activity: build_activity_config(&file.activity),
+            staleness: file.staleness.clone(),
         }
     }
 }
@@ -299,6 +351,7 @@ impl Default for Config {
             progressive: false,
             platform,
             activity: ActivityConfig::default(),
+            staleness: None,
         }
     }
 }
@@ -320,6 +373,7 @@ mod tests {
             no_verbose: false,
             progressive: false,
             no_progressive: false,
+            sort: crate::cli::SortOrder::Size,
         }
     }
 

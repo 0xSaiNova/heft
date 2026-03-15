@@ -369,5 +369,6 @@ fn category_sort_order(category: &BloatCategory) -> u8 {
         BloatCategory::IdeData => 3,
         BloatCategory::SystemCache => 4,
         BloatCategory::Other => 5,
+        BloatCategory::LargeFile => 6,
     }
 }

@@ -152,6 +152,7 @@ mod tests {
             cleanup_hint: None,
             active: None,
             active_reason: None,
+            staleness_score: None,
         }
     }
 

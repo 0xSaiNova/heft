@@ -60,6 +60,7 @@ impl Detector for CacheDetector {
                         cleanup_hint: Some(cache.cleanup_hint.clone()),
                         active: None,
                         active_reason: None,
+                        staleness_score: None,
                     });
 
                     for warning in warnings {
