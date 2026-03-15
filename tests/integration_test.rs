@@ -35,6 +35,8 @@ fn test_config(root: PathBuf) -> Config {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
+        staleness: None,
     }
 }
 
@@ -207,9 +209,8 @@ fn detects_dotnet_bin_obj_with_csproj() {
     let projects = project_entries(&result);
 
     assert!(
-        projects.len() >= 1,
-        "expected at least 1 .NET artifact, got {}",
-        projects.len()
+        !projects.is_empty(),
+        "expected at least 1 .NET artifact, got 0"
     );
     assert!(
         projects
@@ -267,6 +268,8 @@ fn scan_runs_without_panic() {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
+        staleness: None,
     };
 
     // should not panic, may or may not find caches
@@ -297,6 +300,8 @@ fn cache_entries_have_correct_category() {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
+        staleness: None,
     };
 
     let result = scan::run(&config);

@@ -1,6 +1,7 @@
 use clap::Parser;
+use heft::audit;
 use heft::clean;
-use heft::cli::{CleanCategory, Cli, Command};
+use heft::cli::{CleanCategory, Cli, Command, SortOrder};
 use heft::config::Config;
 use heft::report;
 use heft::scan;
@@ -122,13 +123,45 @@ fn print_diff(result: &DiffResult) {
     }
 }
 
+/// Check if stdout is a terminal (for TUI decision).
+#[cfg(feature = "tui")]
+fn atty_check() -> bool {
+    // crossterm (already a dependency) can tell us if we're in a terminal
+    // but the simplest approach: try to use the same FFI as spinner.rs
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn isatty(fd: i32) -> i32;
+        }
+        unsafe { isatty(1) != 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Scan(args) => {
+        None => {
+            let config = Config::from_bare_cli(cli.root.clone());
+            heft::default::run_default(&cli, config);
+        }
+        Some(Command::Scan(args)) => {
             let config = Config::from_scan_args(&args);
-            let result = scan::run(&config);
+            let mut result = scan::run(&config);
+
+            if args.sort == SortOrder::Staleness {
+                result.entries.sort_by(|a, b| {
+                    let sa = a.staleness_score.unwrap_or(0.0);
+                    let sb = b.staleness_score.unwrap_or(0.0);
+                    sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+
+            heft::safety::classify_all(&mut result.entries);
 
             match Store::open() {
                 Ok(mut store) => {
@@ -145,9 +178,16 @@ fn main() {
                 }
             }
 
-            report::print(&result, &config);
+            if config.json_output {
+                println!("{}", report::json::render(&result));
+            } else if args.sort == SortOrder::Staleness {
+                // flat staleness ranked output (table renderer would re-group by category)
+                heft::summary::print_summary(&result.entries);
+            } else {
+                report::print(&result, &config);
+            }
         }
-        Command::Report(args) => {
+        Some(Command::Report(args)) => {
             let store = match Store::open() {
                 Ok(s) => s,
                 Err(e) => {
@@ -253,9 +293,25 @@ fn main() {
                 }
             }
         }
-        Command::Clean(args) => {
-            let config = Config::from_clean_args(&args);
-            let scan_result = scan::run(&config);
+        Some(Command::Clean(args)) => {
+            let mut config = Config::from_clean_args(&args);
+
+            // handle --active-window override
+            if let Some(ref window_str) = args.active_window {
+                if window_str == "0s" || window_str == "0" {
+                    config.activity.enable_git = false;
+                    config.activity.enable_mtime = false;
+                    config.activity.check_processes = false;
+                } else if let Ok(d) = humantime::parse_duration(window_str) {
+                    config.activity.window = d;
+                } else {
+                    eprintln!("Invalid active window: '{window_str}'. Use e.g. '7d', '24h', '0s'.");
+                    std::process::exit(1);
+                }
+            }
+
+            let mut scan_result = scan::run(&config);
+            heft::safety::classify_all(&mut scan_result.entries);
 
             let mode = if args.dry_run {
                 clean::CleanMode::DryRun
@@ -282,11 +338,17 @@ fn main() {
                             heft::scan::detector::BloatCategory::SystemCache
                         }
                         CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                        CleanCategory::LargeFile => heft::scan::detector::BloatCategory::LargeFile,
                     })
                     .collect()
             });
 
-            let clean_result = clean::run(&scan_result, mode, category_filter);
+            let clean_opts = clean::CleanOptions {
+                category_filter,
+                include_active: args.include_active,
+                stale_only: args.stale,
+            };
+            let clean_result = clean::run(&scan_result, mode, clean_opts);
 
             if !matches!(mode, clean::CleanMode::Interactive) {
                 for item in &clean_result.deleted {
@@ -313,7 +375,7 @@ fn main() {
                 }
             }
         }
-        Command::Diff(args) => {
+        Some(Command::Diff(args)) => {
             use heft::store::diff;
 
             let store = match Store::open() {
@@ -406,6 +468,78 @@ fn main() {
             );
 
             print_diff(&diff_result);
+        }
+        Some(Command::Audit(args)) => {
+            let roots = args.roots.unwrap_or_else(|| {
+                heft::platform::home_dir()
+                    .map(|h| vec![h])
+                    .unwrap_or_default()
+            });
+
+            let (custom_rules, min_size) = heft::config::load_audit_config();
+
+            let config = audit::AuditConfig {
+                roots,
+                cross_mount: args.cross_mount,
+                min_entry_size: min_size.unwrap_or(10 * 1024 * 1024),
+                custom_rules,
+                export: args.export.clone(),
+                save: args.save,
+            };
+
+            let result = audit::run(&config);
+
+            // save audit snapshot if requested
+            if args.save {
+                match Store::open() {
+                    Ok(mut store) => match store.save_audit(&result) {
+                        Ok(id) => eprintln!("Audit saved as snapshot #{id}"),
+                        Err(e) => eprintln!("Warning: failed to save audit: {e}"),
+                    },
+                    Err(e) => eprintln!("Warning: failed to open store: {e}"),
+                }
+            }
+
+            match args.export.as_deref() {
+                Some("json") => {
+                    let mut stdout = std::io::stdout().lock();
+                    if let Err(e) = audit::export::export_json(&result, &mut stdout) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                Some("csv") => {
+                    let mut stdout = std::io::stdout().lock();
+                    if let Err(e) = audit::export::export_csv(&result, &mut stdout) {
+                        eprintln!("Error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                Some(fmt) => {
+                    eprintln!("Unknown export format: '{fmt}'. Use 'json' or 'csv'.");
+                    std::process::exit(1);
+                }
+                None => {
+                    #[cfg(feature = "tui")]
+                    {
+                        // launch TUI if stdout is a terminal
+                        if atty_check() {
+                            if let Err(e) = heft::tui::run_interactive(&result) {
+                                eprintln!("TUI error: {e}");
+                                // fallback to summary
+                                audit::export::print_summary(&result);
+                            }
+                        } else {
+                            audit::export::print_summary(&result);
+                        }
+                    }
+
+                    #[cfg(not(feature = "tui"))]
+                    {
+                        audit::export::print_summary(&result);
+                    }
+                }
+            }
         }
     }
 }
