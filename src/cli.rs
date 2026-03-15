@@ -93,6 +93,10 @@ pub struct ScanArgs {
     /// Disable progressive output (overrides config file)
     #[arg(long, conflicts_with = "progressive", hide_short_help = true)]
     pub no_progressive: bool,
+
+    /// Sort output by size (default) or staleness
+    #[arg(long, default_value = "size")]
+    pub sort: String,
 }
 
 #[derive(Parser)]

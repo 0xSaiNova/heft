@@ -151,7 +151,15 @@ fn main() {
         }
         Some(Command::Scan(args)) => {
             let config = Config::from_scan_args(&args);
-            let result = scan::run(&config);
+            let mut result = scan::run(&config);
+
+            if args.sort == "staleness" {
+                result.entries.sort_by(|a, b| {
+                    let sa = a.staleness_score.unwrap_or(0.0);
+                    let sb = b.staleness_score.unwrap_or(0.0);
+                    sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
 
             match Store::open() {
                 Ok(mut store) => {

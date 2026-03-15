@@ -164,8 +164,8 @@ pub fn run_picker(
             Ok(ev) => ev,
             Err(_) => break Vec::new(),
         };
-        match ev {
-            Event::Key(key) => match key.code {
+        if let Event::Key(key) = ev {
+            match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => break Vec::new(),
                 KeyCode::Enter => {
                     let picks: Vec<_> = selected
@@ -199,7 +199,6 @@ pub fn run_picker(
                     }
                 }
                 KeyCode::Char('a') => {
-                    // Select all stale
                     for (i, e) in entries.iter().enumerate() {
                         if e.staleness_score.unwrap_or(0.0) > 0.0 {
                             if e.active == Some(true) && !include_active {
@@ -211,15 +210,13 @@ pub fn run_picker(
                     let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
                 }
                 KeyCode::Char('n') => {
-                    // Deselect all
                     for s in selected.iter_mut() {
                         *s = false;
                     }
                     let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
     };
 
