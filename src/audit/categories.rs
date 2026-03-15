@@ -175,9 +175,7 @@ fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, 
             }
 
             // trash
-            if rel_str.starts_with(".Trash")
-                || rel_str.starts_with(".local/share/Trash")
-            {
+            if rel_str.starts_with(".Trash") || rel_str.starts_with(".local/share/Trash") {
                 return Some((AuditCategory::TrashTemp, None));
             }
 
@@ -251,13 +249,7 @@ mod tests {
 
     #[test]
     fn classifies_var_log_as_logs() {
-        let (cat, _) = classify_path(
-            &PathBuf::from("/var/log/syslog"),
-            "syslog",
-            None,
-            None,
-            &[],
-        );
+        let (cat, _) = classify_path(&PathBuf::from("/var/log/syslog"), "syslog", None, None, &[]);
         assert_eq!(cat, AuditCategory::Logs);
     }
 

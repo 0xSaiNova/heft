@@ -15,7 +15,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // tab bar
-            Constraint::Min(0),   // main content
+            Constraint::Min(0),    // main content
             Constraint::Length(1), // status bar
         ])
         .split(frame.area());
@@ -83,14 +83,10 @@ fn render_category_view(frame: &mut Frame, area: Rect, state: &AppState) {
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!(
-                " Disk Usage by Category ({}) ",
-                format_bytes(state.total_bytes)
-            )),
-    );
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(format!(
+        " Disk Usage by Category ({}) ",
+        format_bytes(state.total_bytes)
+    )));
 
     frame.render_widget(list, area);
 }
@@ -118,7 +114,10 @@ fn render_hogs_view(frame: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(format!("{:>3}. ", i + 1), style),
                 Span::styled(format!("{:<50}", display_path), style),
                 Span::styled(format!("{:>10}", format_bytes(*size)), style),
-                Span::styled(format!("  [{}]", cat.label()), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("  [{}]", cat.label()),
+                    Style::default().fg(Color::Yellow),
+                ),
             ]))
         })
         .collect();

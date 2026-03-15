@@ -445,13 +445,11 @@ fn main() {
             print_diff(&diff_result);
         }
         Command::Audit(args) => {
-            let roots = args
-                .roots
-                .unwrap_or_else(|| {
-                    heft::platform::home_dir()
-                        .map(|h| vec![h])
-                        .unwrap_or_default()
-                });
+            let roots = args.roots.unwrap_or_else(|| {
+                heft::platform::home_dir()
+                    .map(|h| vec![h])
+                    .unwrap_or_default()
+            });
 
             let config = audit::AuditConfig {
                 roots,
@@ -466,12 +464,10 @@ fn main() {
             // save audit snapshot if requested
             if args.save {
                 match Store::open() {
-                    Ok(mut store) => {
-                        match store.save_audit(&result) {
-                            Ok(id) => eprintln!("Audit saved as snapshot #{id}"),
-                            Err(e) => eprintln!("Warning: failed to save audit: {e}"),
-                        }
-                    }
+                    Ok(mut store) => match store.save_audit(&result) {
+                        Ok(id) => eprintln!("Audit saved as snapshot #{id}"),
+                        Err(e) => eprintln!("Warning: failed to save audit: {e}"),
+                    },
                     Err(e) => eprintln!("Warning: failed to open store: {e}"),
                 }
             }

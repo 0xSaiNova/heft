@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 /// Known dev process names that strongly indicate active development.
 const DEV_PROCESSES: &[&str] = &[
-    "node", "cargo", "rustc", "gradle", "python", "python3",
-    "webpack", "vite", "next", "dotnet", "go", "flask", "uvicorn",
+    "node", "cargo", "rustc", "gradle", "python", "python3", "webpack", "vite", "next", "dotnet",
+    "go", "flask", "uvicorn",
 ];
 
 /// Check if any running process has its cwd under one of the given roots.
@@ -73,7 +73,7 @@ fn scan_proc_cwd(roots: &[PathBuf]) -> HashMap<PathBuf, String> {
                     Some(name) if DEV_PROCESSES.contains(&name.as_str()) => {
                         format!("{name} running (pid {pid_str})")
                     }
-                    Some(name) => format!("process {name} (pid {pid_str})")                    ,
+                    Some(name) => format!("process {name} (pid {pid_str})"),
                     None => format!("process (pid {pid_str})"),
                 };
 

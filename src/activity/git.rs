@@ -78,7 +78,10 @@ mod tests {
         let result = last_activity(tmp.path());
         assert!(result.is_some());
 
-        let epoch = result.unwrap().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        let epoch = result
+            .unwrap()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap();
         assert_eq!(epoch.as_secs(), 1700100000);
     }
 

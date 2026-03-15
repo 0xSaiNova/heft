@@ -84,10 +84,7 @@ pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanRes
             }
             for entry in &protected {
                 let location_str = location_display(&entry.location);
-                let reason = entry
-                    .active_reason
-                    .as_deref()
-                    .unwrap_or("active project");
+                let reason = entry.active_reason.as_deref().unwrap_or("active project");
                 clean_result
                     .deleted
                     .push(format!("[protected] {location_str} ({reason})"));

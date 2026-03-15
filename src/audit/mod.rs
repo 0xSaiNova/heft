@@ -79,9 +79,7 @@ pub fn run(config: &AuditConfig) -> AuditResult {
     let mut dir_sizes: HashMap<PathBuf, (u64, AuditCategory)> = HashMap::new();
 
     for root in &config.roots {
-        let walker = jwalk::WalkDir::new(root)
-            .follow_links(false)
-            .sort(true);
+        let walker = jwalk::WalkDir::new(root).follow_links(false).sort(true);
 
         for entry in walker {
             match entry {
@@ -90,15 +88,9 @@ pub fn run(config: &AuditConfig) -> AuditResult {
                     let file_type = entry.file_type;
 
                     if file_type.is_file() {
-                        let size = entry
-                            .metadata()
-                            .map(|m| m.len())
-                            .unwrap_or(0);
+                        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
 
-                        let dir_name = path
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("");
+                        let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                         let ext = path.extension().and_then(|e| e.to_str());
 
                         let (category, _subcategory) = categories::classify_path(

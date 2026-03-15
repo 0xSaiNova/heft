@@ -169,8 +169,7 @@ pub fn run(config: &Config) -> ScanResult {
     if let Some(ref sp) = spinner {
         sp.set_message("Checking activity...");
     }
-    let activity_results =
-        crate::activity::check(&scan_result.entries, &config.activity);
+    let activity_results = crate::activity::check(&scan_result.entries, &config.activity);
     for (i, ar) in activity_results.into_iter().enumerate() {
         scan_result.entries[i].active = Some(ar.active);
         scan_result.entries[i].active_reason = ar.reason;

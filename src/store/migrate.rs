@@ -69,7 +69,7 @@ fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
             file_count INTEGER NOT NULL,
             FOREIGN KEY(snapshot_id) REFERENCES audit_snapshots(id) ON DELETE CASCADE
         );
-        CREATE INDEX IF NOT EXISTS idx_audit_items_snapshot ON audit_items(snapshot_id);"
+        CREATE INDEX IF NOT EXISTS idx_audit_items_snapshot ON audit_items(snapshot_id);",
     )?;
     Ok(())
 }
@@ -91,8 +91,9 @@ mod tests {
                 reclaimable_bytes INTEGER NOT NULL,
                 last_modified INTEGER,
                 cleanup_hint TEXT
-            )"
-        ).unwrap();
+            )",
+        )
+        .unwrap();
     }
 
     #[test]
@@ -109,7 +110,9 @@ mod tests {
             [],
         ).unwrap();
 
-        let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
         assert_eq!(version, CURRENT_VERSION);
     }
 
@@ -140,8 +143,9 @@ mod tests {
                 cleanup_hint TEXT,
                 active INTEGER,
                 active_reason TEXT
-            )"
-        ).unwrap();
+            )",
+        )
+        .unwrap();
 
         // should not error despite columns already existing
         run_migrations(&conn).unwrap();

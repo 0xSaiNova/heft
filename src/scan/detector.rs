@@ -66,8 +66,18 @@ pub const SOURCE_EXTENSIONS: &[&str] = &[
 
 /// Known artifact directory names that should be skipped during source file walks.
 pub const ARTIFACT_DIR_NAMES: &[&str] = &[
-    "node_modules", "target", ".venv", "venv", "vendor", "__pycache__",
-    "build", "dist", ".gradle", "bin", "obj", "DerivedData",
+    "node_modules",
+    "target",
+    ".venv",
+    "venv",
+    "vendor",
+    "__pycache__",
+    "build",
+    "dist",
+    ".gradle",
+    "bin",
+    "obj",
+    "DerivedData",
 ];
 
 pub struct DetectorResult {

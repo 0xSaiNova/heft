@@ -53,7 +53,10 @@ pub fn print_summary(result: &AuditResult) {
 
     // top directories
     if !result.top_dirs.is_empty() {
-        println!("\nTop {} largest directories:", result.top_dirs.len().min(10));
+        println!(
+            "\nTop {} largest directories:",
+            result.top_dirs.len().min(10)
+        );
         for (i, (path, size, category)) in result.top_dirs.iter().take(10).enumerate() {
             println!(
                 "  {}. {:50} {:>10}  [{}]",
