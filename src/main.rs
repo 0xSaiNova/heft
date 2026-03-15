@@ -341,6 +341,7 @@ fn main() {
             let clean_opts = clean::CleanOptions {
                 category_filter,
                 include_active: args.include_active,
+                stale_only: args.stale,
             };
             let clean_result = clean::run(&scan_result, mode, clean_opts);
 

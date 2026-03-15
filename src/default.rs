@@ -153,6 +153,7 @@ fn confirm_and_clean(entries: Vec<crate::scan::detector::BloatEntry>, include_ac
     let opts = clean::CleanOptions {
         category_filter: None,
         include_active,
+        stale_only: false,
     };
     let clean_result = clean::run(&selected, clean::CleanMode::Execute, opts);
     for item in &clean_result.deleted {

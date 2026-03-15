@@ -31,6 +31,7 @@ pub enum CleanMode {
 pub struct CleanOptions {
     pub category_filter: Option<Vec<BloatCategory>>,
     pub include_active: bool,
+    pub stale_only: bool,
 }
 
 pub struct CleanResult {
@@ -61,6 +62,9 @@ pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanRes
                 if !filter.contains(&entry.category) {
                     return false;
                 }
+            }
+            if opts.stale_only && entry.staleness_score.unwrap_or(0.0) <= 0.0 {
+                return false;
             }
             true
         })

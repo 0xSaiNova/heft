@@ -183,6 +183,10 @@ pub struct CleanArgs {
     /// Override the active use time window (e.g. "3d", "24h", "0s" to disable)
     #[arg(long)]
     pub active_window: Option<String>,
+
+    /// Only target entries with staleness_score > 0
+    #[arg(long, default_value_t = false)]
+    pub stale: bool,
 }
 
 #[derive(Parser)]
