@@ -280,6 +280,7 @@ fn main() {
                 if window_str == "0s" || window_str == "0" {
                     config.activity.enable_git = false;
                     config.activity.enable_mtime = false;
+                    config.activity.check_processes = false;
                 } else if let Ok(d) = humantime::parse_duration(window_str) {
                     config.activity.window = d;
                 } else {
