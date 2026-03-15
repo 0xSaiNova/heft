@@ -1,13 +1,12 @@
 //! Audit category system and classification engine.
 //!
 //! Assigns every file/directory to a two-level category hierarchy.
-//! Priority order: dev artifact patterns > path match > custom rules > extension > Other
+//! Priority order: dev artifact patterns > path match > custom rules >
+//! parent context > extension > Other
 
 use std::path::Path;
 
 use serde::Serialize;
-
-use crate::scan::detector::ARTIFACT_DIR_NAMES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum AuditCategory {
@@ -83,12 +82,12 @@ pub fn classify_path(
     home: Option<&Path>,
     custom_rules: &[CustomRule],
 ) -> (AuditCategory, Option<String>) {
-    // 1. dev artifact pattern match (highest priority)
-    if ARTIFACT_DIR_NAMES.contains(&dir_name) {
-        return (AuditCategory::DevArtifacts, Some(dir_name.to_string()));
+    // 1. dev artifact pattern match with parent file guards
+    if let Some(result) = classify_dev_artifact(path, dir_name) {
+        return result;
     }
 
-    // 2. path-based classification
+    // 2. path-based classification (caches, known paths, system dirs)
     if let Some(result) = classify_by_path(path, home) {
         return result;
     }
@@ -110,7 +109,12 @@ pub fn classify_path(
         }
     }
 
-    // 4. extension-based classification
+    // 4. parent context (app data subdirectories inherit from parent)
+    if let Some(result) = classify_by_parent_context(path, home) {
+        return result;
+    }
+
+    // 5. extension-based classification
     if let Some(ext) = extension {
         let ext_lower = ext.to_lowercase();
         let ext_ref = ext_lower.as_str();
@@ -132,8 +136,127 @@ pub fn classify_path(
         }
     }
 
-    // 5. default
+    // 6. default
     (AuditCategory::Other, None)
+}
+
+/// Classify directories that are known build artifacts with parent file guards.
+/// Replicates the detection logic from projects.rs detect_artifact() as pure
+/// path checks without importing detector modules.
+fn classify_dev_artifact(path: &Path, dir_name: &str) -> Option<(AuditCategory, Option<String>)> {
+    let parent = path.parent()?;
+
+    match dir_name {
+        // node_modules: always a dev artifact (very low false positive risk)
+        "node_modules" => Some((AuditCategory::DevArtifacts, Some("node_modules".into()))),
+
+        // target: only if parent has Cargo.toml (avoids ~/Documents/target/ false positive)
+        "target" if parent.join("Cargo.toml").exists() => {
+            Some((AuditCategory::DevArtifacts, Some("Rust target".into())))
+        }
+
+        // python caches: low false positive risk, no guard needed
+        "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".tox" => {
+            Some((AuditCategory::DevArtifacts, Some(dir_name.into())))
+        }
+
+        // venv: only with python project markers
+        ".venv" | "venv" if has_python_project(parent) => {
+            Some((AuditCategory::DevArtifacts, Some("Python venv".into())))
+        }
+
+        // vendor: go or php
+        "vendor" if parent.join("go.mod").exists() => {
+            Some((AuditCategory::DevArtifacts, Some("Go vendor".into())))
+        }
+        "vendor" if parent.join("composer.json").exists() => {
+            Some((AuditCategory::DevArtifacts, Some("PHP vendor".into())))
+        }
+
+        // gradle
+        ".gradle" if has_gradle_project(parent) => {
+            Some((AuditCategory::DevArtifacts, Some("Gradle cache".into())))
+        }
+        "build" if has_gradle_project(parent) && is_gradle_build_dir(path) => {
+            Some((AuditCategory::DevArtifacts, Some("Gradle build".into())))
+        }
+
+        // xcode DerivedData: check if under ~/Library/Developer/Xcode/ or has xcode markers
+        "DerivedData" if is_xcode_derived_data(path) => Some((
+            AuditCategory::DevArtifacts,
+            Some("Xcode DerivedData".into()),
+        )),
+
+        // .NET bin/obj: only with project files
+        "bin" | "obj" if has_dotnet_project(parent) => {
+            Some((AuditCategory::DevArtifacts, Some(".NET build".into())))
+        }
+
+        _ => None,
+    }
+}
+
+fn has_python_project(dir: &Path) -> bool {
+    dir.join("requirements.txt").exists()
+        || dir.join("setup.py").exists()
+        || dir.join("pyproject.toml").exists()
+        || dir.join("setup.cfg").exists()
+}
+
+fn has_gradle_project(dir: &Path) -> bool {
+    dir.join("build.gradle").exists() || dir.join("build.gradle.kts").exists()
+}
+
+fn is_gradle_build_dir(path: &Path) -> bool {
+    path.join("classes").exists()
+        || path.join("libs").exists()
+        || path.join("tmp").exists()
+        || path.join("generated").exists()
+        || path.join("intermediates").exists()
+}
+
+fn is_xcode_derived_data(path: &Path) -> bool {
+    // check standard xcode cache location
+    let in_xcode_cache = path.ancestors().any(|ancestor| {
+        if let (Some(name), Some(parent)) = (ancestor.file_name(), ancestor.parent()) {
+            name.to_str() == Some("Xcode")
+                && parent
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s == "Developer")
+                    .unwrap_or(false)
+        } else {
+            false
+        }
+    });
+
+    let has_xcode_markers = path.join("Build").exists()
+        || path.join("Logs").exists()
+        || path.join("ModuleCache").exists()
+        || path.join("info.plist").exists();
+
+    in_xcode_cache || has_xcode_markers
+}
+
+fn has_dotnet_project(dir: &Path) -> bool {
+    if dir.join("Directory.Build.props").exists()
+        || dir.join("packages.config").exists()
+        || dir.join("NuGet.Config").exists()
+    {
+        return true;
+    }
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let name = e.file_name();
+                let s = name.to_str().unwrap_or("");
+                s.ends_with(".csproj")
+                    || s.ends_with(".fsproj")
+                    || s.ends_with(".vbproj")
+                    || s.ends_with(".sln")
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, Option<String>)> {
@@ -154,7 +277,7 @@ fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, 
     }
     if path.starts_with("/var") {
         if path.starts_with("/var/log") {
-            return Some((AuditCategory::Logs, Some("system".to_string())));
+            return Some((AuditCategory::Logs, Some("system".into())));
         }
         return Some((AuditCategory::System, None));
     }
@@ -165,36 +288,134 @@ fn classify_by_path(path: &Path, home: Option<&Path>) -> Option<(AuditCategory, 
     }
 
     // home-relative paths
-    if let Some(home) = home {
-        if let Ok(rel) = path.strip_prefix(home) {
-            let rel_str = rel.to_string_lossy();
+    let home = home?;
+    let rel = path.strip_prefix(home).ok()?;
+    let rel_str = rel.to_string_lossy();
 
-            // downloads
-            if rel_str.starts_with("Downloads") {
-                return Some((AuditCategory::Downloads, None));
-            }
+    // dev caches (checked before general app data so they get DevArtifacts, not ApplicationData)
+    if let Some(result) = classify_dev_cache(&rel_str) {
+        return Some(result);
+    }
 
-            // trash
-            if rel_str.starts_with(".Trash") || rel_str.starts_with(".local/share/Trash") {
-                return Some((AuditCategory::TrashTemp, None));
-            }
+    // docker desktop
+    if rel_str.starts_with("Library/Containers/com.docker.docker") {
+        return Some((AuditCategory::DevArtifacts, Some("Docker Desktop".into())));
+    }
 
-            // logs
-            if rel_str.starts_with("Library/Logs") {
-                return Some((AuditCategory::Logs, Some("app".to_string())));
-            }
+    // xcode derived data (path based, separate from the dir name guard above)
+    if rel_str.starts_with("Library/Developer/Xcode/DerivedData") {
+        return Some((
+            AuditCategory::DevArtifacts,
+            Some("Xcode DerivedData".into()),
+        ));
+    }
 
-            // application data
-            if rel_str.starts_with("Library/Application Support")
-                || rel_str.starts_with(".local/share")
-                || rel_str.starts_with(".config")
-            {
-                return Some((AuditCategory::ApplicationData, None));
-            }
+    // downloads
+    if rel_str.starts_with("Downloads") {
+        return Some((AuditCategory::Downloads, None));
+    }
 
-            // cache (not already caught by dev artifact patterns)
-            if rel_str.starts_with(".cache") || rel_str.starts_with("Library/Caches") {
-                return Some((AuditCategory::ApplicationData, Some("Cache".to_string())));
+    // trash
+    if rel_str.starts_with(".Trash") || rel_str.starts_with(".local/share/Trash") {
+        return Some((AuditCategory::TrashTemp, None));
+    }
+
+    // logs
+    if rel_str.starts_with("Library/Logs") {
+        return Some((AuditCategory::Logs, Some("app".into())));
+    }
+
+    // application data: extract app name from next path component
+    let app_data_prefixes: &[&str] = &["Library/Application Support/", ".local/share/", ".config/"];
+    for prefix in app_data_prefixes {
+        if let Some(rest) = rel_str.strip_prefix(prefix) {
+            let app_name = rest.split('/').next().unwrap_or("");
+            let sub = if app_name.is_empty() {
+                None
+            } else {
+                Some(app_name.to_string())
+            };
+            return Some((AuditCategory::ApplicationData, sub));
+        }
+    }
+    // bare directory matches (no trailing slash)
+    if rel_str == "Library/Application Support" || rel_str == ".local/share" || rel_str == ".config"
+    {
+        return Some((AuditCategory::ApplicationData, None));
+    }
+
+    // cache (general, not already caught by dev cache patterns)
+    if rel_str.starts_with(".cache") || rel_str.starts_with("Library/Caches") {
+        return Some((AuditCategory::ApplicationData, Some("Cache".into())));
+    }
+
+    None
+}
+
+/// Classify known developer tool cache paths relative to home.
+fn classify_dev_cache(rel_str: &str) -> Option<(AuditCategory, Option<String>)> {
+    let checks: &[(&str, &str)] = &[
+        (".npm", "npm cache"),
+        (".cache/yarn", "yarn cache"),
+        ("Library/Caches/Yarn", "yarn cache"),
+        (".local/share/pnpm/store", "pnpm store"),
+        ("Library/pnpm/store", "pnpm store"),
+        (".cache/pip", "pip cache"),
+        ("Library/Caches/pip", "pip cache"),
+        (".cargo/registry", "cargo registry"),
+        (".cargo/git", "cargo git"),
+        ("go/pkg/mod", "go module cache"),
+        (".gradle/caches", "gradle cache"),
+        (".m2/repository", "maven cache"),
+        (".nuget/packages", "nuget cache"),
+        (".android/avd", "android AVD"),
+        (".android/cache", "android SDK cache"),
+        ("Library/Android/sdk", "android SDK"),
+        ("Android/Sdk", "android SDK"),
+        (".config/Code", "vscode data"),
+        ("Library/Application Support/Code", "vscode data"),
+    ];
+
+    for (prefix, subcategory) in checks {
+        if rel_str.starts_with(prefix) {
+            return Some((AuditCategory::DevArtifacts, Some((*subcategory).into())));
+        }
+    }
+
+    None
+}
+
+/// Classify files inside known application data directories by extracting
+/// the app name from the path hierarchy.
+fn classify_by_parent_context(
+    path: &Path,
+    home: Option<&Path>,
+) -> Option<(AuditCategory, Option<String>)> {
+    let home = home?;
+    let rel = path.strip_prefix(home).ok()?;
+    let components: Vec<_> = rel.components().collect();
+
+    // ~/Library/Application Support/{app}/...
+    // ~/.local/share/{app}/...
+    // ~/.config/{app}/...
+    let app_data_prefixes: &[&[&str]] = &[
+        &["Library", "Application Support"],
+        &[".local", "share"],
+        &[".config"],
+    ];
+
+    for prefix in app_data_prefixes {
+        if components.len() > prefix.len() {
+            let matches = components
+                .iter()
+                .zip(prefix.iter())
+                .all(|(c, p)| c.as_os_str().to_str() == Some(p));
+            if matches {
+                let app_name = components[prefix.len()]
+                    .as_os_str()
+                    .to_string_lossy()
+                    .to_string();
+                return Some((AuditCategory::ApplicationData, Some(app_name)));
             }
         }
     }
@@ -218,6 +439,63 @@ mod tests {
         );
         assert_eq!(cat, AuditCategory::DevArtifacts);
         assert_eq!(sub.as_deref(), Some("node_modules"));
+    }
+
+    #[test]
+    fn target_without_cargo_toml_is_not_dev_artifact() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("Documents").join("target");
+        std::fs::create_dir_all(&target).unwrap();
+        // no Cargo.toml in parent — should NOT be DevArtifacts
+
+        let (cat, _) = classify_path(&target, "target", None, Some(tmp.path()), &[]);
+        assert_ne!(cat, AuditCategory::DevArtifacts);
+    }
+
+    #[test]
+    fn target_with_cargo_toml_is_dev_artifact() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("myproject");
+        std::fs::create_dir_all(project.join("target")).unwrap();
+        std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+
+        let (cat, sub) = classify_path(
+            &project.join("target"),
+            "target",
+            None,
+            Some(tmp.path()),
+            &[],
+        );
+        assert_eq!(cat, AuditCategory::DevArtifacts);
+        assert_eq!(sub.as_deref(), Some("Rust target"));
+    }
+
+    #[test]
+    fn cargo_registry_is_dev_artifact() {
+        let home = PathBuf::from("/home/user");
+        let (cat, sub) = classify_path(
+            &PathBuf::from("/home/user/.cargo/registry/crates"),
+            "crates",
+            None,
+            Some(&home),
+            &[],
+        );
+        assert_eq!(cat, AuditCategory::DevArtifacts);
+        assert_eq!(sub.as_deref(), Some("cargo registry"));
+    }
+
+    #[test]
+    fn npm_cache_is_dev_artifact() {
+        let home = PathBuf::from("/home/user");
+        let (cat, sub) = classify_path(
+            &PathBuf::from("/home/user/.npm/_cacache"),
+            "_cacache",
+            None,
+            Some(&home),
+            &[],
+        );
+        assert_eq!(cat, AuditCategory::DevArtifacts);
+        assert_eq!(sub.as_deref(), Some("npm cache"));
     }
 
     #[test]
@@ -283,5 +561,19 @@ mod tests {
             &[],
         );
         assert_eq!(cat, AuditCategory::Other);
+    }
+
+    #[test]
+    fn parent_context_classifies_slack_log_as_app_data() {
+        let home = PathBuf::from("/home/user");
+        let (cat, sub) = classify_path(
+            &PathBuf::from("/home/user/.config/Slack/logs/app.log"),
+            "app.log",
+            Some("log"),
+            Some(&home),
+            &[],
+        );
+        assert_eq!(cat, AuditCategory::ApplicationData);
+        assert_eq!(sub.as_deref(), Some("Slack"));
     }
 }
