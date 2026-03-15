@@ -49,6 +49,21 @@ toml = "0.8"
 # tiny crate, no transitive deps, handles all standard duration formats
 humantime = "2"
 
+# parallel directory walking for full drive audit
+# walkdir is single threaded; jwalk parallelizes across directory branches
+# coexists with walkdir: scan detectors use walkdir for small targeted walks,
+# audit uses jwalk for full drive scans where parallelism is essential
+jwalk = "0.8"
+
+# TUI rendering for interactive audit exploration
+# feature gated: users who only need CLI/export output can disable
+ratatui = { version = "0.29", optional = true }
+crossterm = { version = "0.28", optional = true }
+
+[features]
+default = ["tui"]
+tui = ["ratatui", "crossterm"]
+
 [dev-dependencies]
 # criterion for detailed benchmarking with statistical analysis
 # provides regression detection and comparison across runs

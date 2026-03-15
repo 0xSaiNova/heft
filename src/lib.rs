@@ -1,4 +1,5 @@
 pub mod activity;
+pub mod audit;
 pub mod clean;
 pub mod cli;
 pub mod config;
