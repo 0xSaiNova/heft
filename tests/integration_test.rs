@@ -35,6 +35,7 @@ fn test_config(root: PathBuf) -> Config {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
     }
 }
 
@@ -267,6 +268,7 @@ fn scan_runs_without_panic() {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
     };
 
     // should not panic, may or may not find caches
@@ -297,6 +299,7 @@ fn cache_entries_have_correct_category() {
         verbose: false,
         progressive: false,
         platform: Platform::Linux,
+        activity: heft::activity::ActivityConfig::default(),
     };
 
     let result = scan::run(&config);

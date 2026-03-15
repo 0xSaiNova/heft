@@ -49,6 +49,8 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             reclaimable_bytes INTEGER NOT NULL,
             last_modified INTEGER,
             cleanup_hint TEXT,
+            active INTEGER,
+            active_reason TEXT,
             FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
         )",
         [],
@@ -73,6 +75,7 @@ impl Store {
         let conn = Connection::open(db_path)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         init_schema(&conn)?;
+        super::migrate::run_migrations(&conn)?;
         Ok(Store { conn })
     }
 
@@ -81,6 +84,7 @@ impl Store {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         init_schema(&conn)?;
+        super::migrate::run_migrations(&conn)?;
         Ok(Store { conn })
     }
 
@@ -121,8 +125,8 @@ impl Store {
         let snapshot_id = tx.last_insert_rowid();
 
         let mut stmt = tx.prepare_cached(
-            "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+            "INSERT INTO entries (snapshot_id, category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
         )?;
 
         for entry in &result.entries {
@@ -140,7 +144,9 @@ impl Store {
                 i64::try_from(entry.size_bytes).unwrap_or(i64::MAX),
                 i64::try_from(entry.reclaimable_bytes).unwrap_or(i64::MAX),
                 entry.last_modified,
-                entry.cleanup_hint.as_deref()
+                entry.cleanup_hint.as_deref(),
+                entry.active,
+                entry.active_reason.as_deref()
             ])?;
         }
 
@@ -206,7 +212,7 @@ impl Store {
         snapshot_id: i64,
     ) -> Result<Vec<BloatEntry>, Box<dyn std::error::Error>> {
         let mut stmt = self.conn.prepare(
-            "SELECT category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint
+            "SELECT category, name, location, size_bytes, reclaimable_bytes, last_modified, cleanup_hint, active, active_reason
              FROM entries
              WHERE snapshot_id = ?1"
         )?;
@@ -241,11 +247,73 @@ impl Store {
                     reclaimable_bytes: row.get::<_, i64>(4)?.max(0) as u64,
                     last_modified: row.get(5)?,
                     cleanup_hint: row.get(6)?,
+                    active: row.get::<_, Option<bool>>(7)?,
+                    active_reason: row.get(8)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(entries)
+    }
+
+    /// Save an audit result as a snapshot
+    pub fn save_audit(
+        &mut self,
+        result: &crate::audit::AuditResult,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+
+        let tx = self.conn.transaction()?;
+
+        tx.execute(
+            "INSERT INTO audit_snapshots (timestamp, total_bytes, file_count, dir_count, duration_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                timestamp,
+                i64::try_from(result.total_bytes).unwrap_or(i64::MAX),
+                i64::try_from(result.file_count).unwrap_or(i64::MAX),
+                i64::try_from(result.dir_count).unwrap_or(i64::MAX),
+                i64::try_from(result.duration.as_millis()).unwrap_or(i64::MAX),
+            ],
+        )?;
+
+        let snapshot_id = tx.last_insert_rowid();
+
+        // store per-category aggregates
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO audit_items (snapshot_id, category, subcategory, path, size_bytes, file_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        )?;
+
+        for (category, size) in &result.by_category {
+            stmt.execute(params![
+                snapshot_id,
+                category.label(),
+                Option::<String>::None,
+                "",
+                i64::try_from(*size).unwrap_or(i64::MAX),
+                0i64,
+            ])?;
+        }
+
+        // store top directories
+        for (path, size, category) in &result.top_dirs {
+            stmt.execute(params![
+                snapshot_id,
+                category.label(),
+                Option::<String>::None,
+                path.to_string_lossy().as_ref(),
+                i64::try_from(*size).unwrap_or(i64::MAX),
+                0i64,
+            ])?;
+        }
+
+        drop(stmt);
+        tx.commit()?;
+
+        Ok(snapshot_id)
     }
 }
 
@@ -274,6 +342,8 @@ mod tests {
             reclaimable_bytes: size,
             last_modified: None,
             cleanup_hint: None,
+            active: None,
+            active_reason: None,
         }
     }
 

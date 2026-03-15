@@ -58,6 +58,8 @@ impl Detector for CacheDetector {
                         reclaimable_bytes: reclaimable,
                         last_modified: None,
                         cleanup_hint: Some(cache.cleanup_hint.clone()),
+                        active: None,
+                        active_reason: None,
                     });
 
                     for warning in warnings {

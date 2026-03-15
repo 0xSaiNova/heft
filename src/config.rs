@@ -5,6 +5,7 @@ use std::time::Duration;
 use directories::BaseDirs;
 use serde::Deserialize;
 
+use crate::activity::ActivityConfig;
 use crate::cli::{CleanArgs, ScanArgs};
 use crate::platform::{self, Platform};
 
@@ -33,11 +34,82 @@ struct FileDetectorsConfig {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
+struct FileActivityConfig {
+    window: Option<String>,
+    sample_limit: Option<usize>,
+    check_processes: Option<bool>,
+    enable_git: Option<bool>,
+    enable_mtime: Option<bool>,
+    protected_paths: Option<Vec<PathBuf>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct FileAuditConfig {
+    rules: Option<Vec<FileAuditRule>>,
+    min_entry_size: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileAuditRule {
+    path_contains: Option<String>,
+    extension: Option<Vec<String>>,
+    category: String,
+    subcategory: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct FileConfig {
     #[serde(default)]
     scan: FileScanConfig,
     #[serde(default)]
     detectors: FileDetectorsConfig,
+    #[serde(default)]
+    activity: FileActivityConfig,
+    #[serde(default)]
+    audit: FileAuditConfig,
+}
+
+/// Load audit custom rules and min_entry_size from config file.
+pub fn load_audit_config() -> (Vec<crate::audit::categories::CustomRule>, Option<u64>) {
+    let file = load_file_config().unwrap_or_default();
+    let rules = file
+        .audit
+        .rules
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|r| {
+            let category = crate::audit::categories::AuditCategory::parse_label(&r.category)?;
+            Some(crate::audit::categories::CustomRule {
+                path_contains: r.path_contains,
+                extension: r.extension,
+                category,
+                subcategory: r.subcategory,
+            })
+        })
+        .collect();
+
+    let min_size = file.audit.min_entry_size.and_then(|s| parse_byte_size(&s));
+
+    (rules, min_size)
+}
+
+fn parse_byte_size(s: &str) -> Option<u64> {
+    let s = s.trim();
+    let (num_str, multiplier) = if let Some(n) = s.strip_suffix("GB") {
+        (n.trim(), 1_000_000_000u64)
+    } else if let Some(n) = s.strip_suffix("MB") {
+        (n.trim(), 1_000_000u64)
+    } else if let Some(n) = s.strip_suffix("KB") {
+        (n.trim(), 1_000u64)
+    } else if let Some(n) = s.strip_suffix('B') {
+        (n.trim(), 1u64)
+    } else {
+        (s, 1u64)
+    };
+    num_str.parse::<u64>().ok().map(|n| n * multiplier)
 }
 
 fn load_file_config() -> Option<FileConfig> {
@@ -86,6 +158,24 @@ pub struct Config {
     pub verbose: bool,
     pub progressive: bool,
     pub platform: Platform,
+    pub activity: ActivityConfig,
+}
+
+fn build_activity_config(file: &FileActivityConfig) -> ActivityConfig {
+    let window = file
+        .window
+        .as_deref()
+        .and_then(|s| humantime::parse_duration(s).ok())
+        .unwrap_or(Duration::from_secs(7 * 24 * 3600));
+
+    ActivityConfig {
+        window,
+        sample_limit: file.sample_limit.unwrap_or(200),
+        check_processes: file.check_processes.unwrap_or(true),
+        enable_git: file.enable_git.unwrap_or(true),
+        enable_mtime: file.enable_mtime.unwrap_or(true),
+        protected_paths: file.protected_paths.clone().unwrap_or_default(),
+    }
 }
 
 impl Config {
@@ -151,6 +241,7 @@ impl Config {
             verbose,
             progressive,
             platform,
+            activity: build_activity_config(&file.activity),
         }
     }
 
@@ -189,6 +280,7 @@ impl Config {
             verbose,
             progressive: file.scan.progressive.unwrap_or(false),
             platform,
+            activity: build_activity_config(&file.activity),
         }
     }
 }
@@ -206,6 +298,7 @@ impl Default for Config {
             verbose: false,
             progressive: false,
             platform,
+            activity: ActivityConfig::default(),
         }
     }
 }

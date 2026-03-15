@@ -23,6 +23,9 @@ pub enum Command {
 
     /// Compare two snapshots
     Diff(DiffArgs),
+
+    /// Categorize all disk usage on a drive or subtree
+    Audit(AuditArgs),
 }
 
 #[derive(Parser)]
@@ -136,6 +139,14 @@ pub struct CleanArgs {
     /// Disable verbose output (overrides config file)
     #[arg(long, conflicts_with = "verbose", hide_short_help = true)]
     pub no_verbose: bool,
+
+    /// Include active projects in cleanup (by default they are protected)
+    #[arg(long, default_value_t = false)]
+    pub include_active: bool,
+
+    /// Override the active use time window (e.g. "3d", "24h", "0s" to disable)
+    #[arg(long)]
+    pub active_window: Option<String>,
 }
 
 #[derive(Parser)]
@@ -147,4 +158,23 @@ pub struct DiffArgs {
     /// Ending snapshot ID for comparison
     #[arg(long)]
     pub to: Option<String>,
+}
+
+#[derive(Parser)]
+pub struct AuditArgs {
+    /// Directories to audit (defaults to home directory)
+    #[arg(long, value_delimiter = ',')]
+    pub roots: Option<Vec<PathBuf>>,
+
+    /// Export format: json or csv (skip TUI, write to stdout)
+    #[arg(long)]
+    pub export: Option<String>,
+
+    /// Save audit results to snapshot database
+    #[arg(long, default_value_t = false)]
+    pub save: bool,
+
+    /// Cross filesystem/mount boundaries
+    #[arg(long, default_value_t = false)]
+    pub cross_mount: bool,
 }

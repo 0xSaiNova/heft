@@ -28,58 +28,73 @@ pub enum CleanMode {
     Execute,
 }
 
+pub struct CleanOptions {
+    pub category_filter: Option<Vec<BloatCategory>>,
+    pub include_active: bool,
+}
+
 pub struct CleanResult {
     pub deleted: Vec<String>,
     pub errors: Vec<String>,
     pub bytes_freed: u64,
 }
 
-pub fn run(
-    result: &ScanResult,
-    mode: CleanMode,
-    category_filter: Option<Vec<BloatCategory>>,
-) -> CleanResult {
+pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanResult {
     let mut clean_result = CleanResult {
         deleted: Vec::new(),
         errors: Vec::new(),
         bytes_freed: 0,
     };
 
-    // filter entries by category if specified, using iterator to avoid allocation
-    let entries = result.entries.iter().filter(|entry| {
-        // allow docker aggregates through, filter out other aggregates
-        if let Location::Aggregate(ref name) = entry.location {
-            if !is_docker_aggregate(name) {
-                return false;
+    // filter entries: apply aggregate, category, and activity filters separately
+    // so only genuinely activity-protected entries get reported as such
+    let filtered: Vec<&BloatEntry> = result
+        .entries
+        .iter()
+        .filter(|entry| {
+            if let Location::Aggregate(ref name) = entry.location {
+                if !is_docker_aggregate(name) {
+                    return false;
+                }
             }
-        }
-
-        if let Some(ref filter) = category_filter {
-            filter.contains(&entry.category)
-        } else {
+            if let Some(ref filter) = opts.category_filter {
+                if !filter.contains(&entry.category) {
+                    return false;
+                }
+            }
             true
-        }
-    });
+        })
+        .collect();
+
+    let (entries, protected): (Vec<&&BloatEntry>, Vec<&&BloatEntry>) = if opts.include_active {
+        (filtered.iter().collect(), Vec::new())
+    } else {
+        filtered
+            .iter()
+            .partition(|entry| entry.active != Some(true))
+    };
 
     // process based on mode - match once instead of per entry
     match mode {
         CleanMode::DryRun => {
-            for entry in entries {
+            for entry in &entries {
                 let location_str = location_display(&entry.location);
                 clean_result
                     .deleted
                     .push(format!("[dry-run] would delete: {location_str}"));
                 clean_result.bytes_freed += entry.reclaimable_bytes;
             }
+            for entry in &protected {
+                let location_str = location_display(&entry.location);
+                let reason = entry.active_reason.as_deref().unwrap_or("active project");
+                eprintln!("[protected] {location_str} ({reason})");
+            }
         }
         CleanMode::Interactive => {
-            // collect entries first (can't iterate twice)
-            let entries_vec: Vec<_> = entries.collect();
-
             // group by category
             use std::collections::HashMap;
             let mut by_category: HashMap<BloatCategory, Vec<&BloatEntry>> = HashMap::new();
-            for entry in &entries_vec {
+            for entry in &entries {
                 by_category.entry(entry.category).or_default().push(entry);
             }
 
@@ -89,7 +104,7 @@ pub fn run(
             }
 
             // calculate totals
-            let total_bytes: u64 = entries_vec.iter().map(|e| e.reclaimable_bytes).sum();
+            let total_bytes: u64 = entries.iter().map(|e| e.reclaimable_bytes).sum();
 
             println!(
                 "\nFound {} reclaimable across {} categories:\n",

@@ -51,10 +51,16 @@ pub fn render(result: &ScanResult) -> String {
         sorted_entries.sort_by_key(|e| std::cmp::Reverse(e.size_bytes));
 
         for entry in sorted_entries {
+            let active_tag = if entry.active == Some(true) {
+                " [active]"
+            } else {
+                ""
+            };
             output.push_str(&format!(
-                "  {:30} {:>10}\n",
+                "  {:30} {:>10}{}\n",
                 truncate(&entry.name, 30),
-                format_bytes(entry.size_bytes)
+                format_bytes(entry.size_bytes),
+                active_tag
             ));
         }
 

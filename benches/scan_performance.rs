@@ -166,6 +166,7 @@ fn create_bench_config(roots: Vec<PathBuf>) -> Config {
         verbose: false,
         progressive: false,
         platform: heft::platform::detect(),
+        activity: heft::activity::ActivityConfig::default(),
     }
 }
 
