@@ -114,7 +114,10 @@ pub fn run_default(cli: &Cli, config: Config) {
             }
         }
         "i" => {
-            println!("  Picker not yet implemented.");
+            let picked = crate::picker::run_picker(&result.entries, cli.include_active);
+            if !picked.is_empty() {
+                confirm_and_clean(picked, cli.include_active);
+            }
         }
         _ => {}
     }
