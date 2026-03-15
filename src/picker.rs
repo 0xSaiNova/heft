@@ -71,15 +71,18 @@ pub fn run_picker(
     let draw = |sel: &[bool],
                 cur: usize,
                 offset: usize,
+                anchor: u16,
                 out: &mut std::io::Stdout|
      -> std::io::Result<()> {
-        // Move cursor to start of our drawing area
-        execute!(out, cursor::MoveToColumn(0))?;
+        // always start from the saved anchor position
+        execute!(out, cursor::MoveTo(0, anchor))?;
 
         // Header
         execute!(
             out,
-            Print("  Select items to clean (space: toggle, a: all stale, n: none, enter: go)\n\r"),
+            Print("  Select items to clean (space: toggle, a: all stale, n: none, enter: go)"),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
+            Print("\n\r"),
         )?;
 
         let end = (offset + visible).min(count);
@@ -136,12 +139,6 @@ pub fn run_picker(
             crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
         )?;
 
-        // move back to top of drawing area. total lines with \n\r:
-        // 1 (header) + (end - offset) items + (visible - (end - offset)) empties = 1 + visible.
-        // footer has no trailing newline, so cursor sits on line (visible + 1).
-        let lines_printed = visible + 1;
-        execute!(out, cursor::MoveUp(lines_printed as u16))?;
-
         out.flush()?;
         Ok(())
     };
@@ -159,7 +156,12 @@ pub fn run_picker(
     }
     let _ = execute!(out, cursor::MoveUp(total_lines as u16));
 
-    let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+    // save the anchor row so every redraw starts from the same absolute
+    // position. this avoids cursor drift on windows/wsl terminals where
+    // relative MoveUp can accumulate rounding errors with long wrapped lines.
+    let anchor_row = cursor::position().map(|(_, row)| row).unwrap_or(0);
+
+    let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
 
     let result = loop {
         let ev = match event::read() {
@@ -188,7 +190,7 @@ pub fn run_picker(
                     let is_protected = entries[cursor_pos].active == Some(true) && !include_active;
                     if !is_protected {
                         selected[cursor_pos] = !selected[cursor_pos];
-                        let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                        let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
                     }
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -197,7 +199,7 @@ pub fn run_picker(
                         if cursor_pos >= scroll_offset + visible {
                             scroll_offset = cursor_pos - visible + 1;
                         }
-                        let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                        let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
                     }
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
@@ -206,7 +208,7 @@ pub fn run_picker(
                         if cursor_pos < scroll_offset {
                             scroll_offset = cursor_pos;
                         }
-                        let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                        let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
                     }
                 }
                 KeyCode::Char('a') => {
@@ -218,13 +220,13 @@ pub fn run_picker(
                             selected[i] = true;
                         }
                     }
-                    let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                    let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
                 }
                 KeyCode::Char('n') => {
                     for s in selected.iter_mut() {
                         *s = false;
                     }
-                    let _ = draw(&selected, cursor_pos, scroll_offset, &mut out);
+                    let _ = draw(&selected, cursor_pos, scroll_offset, anchor_row, &mut out);
                 }
                 _ => {}
             }
@@ -233,9 +235,9 @@ pub fn run_picker(
 
     let _ = terminal::disable_raw_mode();
 
-    // Move cursor past our drawing area so subsequent output is clean
-    let total_lines = visible + 2;
-    let _ = execute!(out, cursor::MoveDown(total_lines as u16), Print("\n"));
+    // move cursor past our drawing area so subsequent output is clean
+    let end_row = anchor_row + (visible as u16) + 2;
+    let _ = execute!(out, cursor::MoveTo(0, end_row), Print("\n"));
 
     result
 }
