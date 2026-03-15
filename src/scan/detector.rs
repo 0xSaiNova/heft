@@ -11,6 +11,7 @@ pub enum BloatCategory {
     IdeData,
     SystemCache,
     Other,
+    LargeFile,
 }
 
 impl BloatCategory {
@@ -22,6 +23,7 @@ impl BloatCategory {
             BloatCategory::IdeData => "IdeData",
             BloatCategory::SystemCache => "SystemCache",
             BloatCategory::Other => "Other",
+            BloatCategory::LargeFile => "LargeFile",
         }
     }
 
@@ -33,6 +35,7 @@ impl BloatCategory {
             BloatCategory::IdeData => "IDE Data",
             BloatCategory::SystemCache => "System Cache",
             BloatCategory::Other => "Other",
+            BloatCategory::LargeFile => "Large Files",
         }
     }
 }
@@ -53,7 +56,36 @@ pub struct BloatEntry {
     pub reclaimable_bytes: u64,
     pub last_modified: Option<i64>,
     pub cleanup_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staleness_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety: Option<crate::safety::SafetyInfo>,
 }
+
+/// Source file extensions used for activity detection and last-modified scanning.
+pub const SOURCE_EXTENSIONS: &[&str] = &[
+    "rs", "js", "ts", "jsx", "tsx", "py", "go", "java", "kt", "swift", "cs", "fs", "vb",
+];
+
+/// Known artifact directory names that should be skipped during source file walks.
+pub const ARTIFACT_DIR_NAMES: &[&str] = &[
+    "node_modules",
+    "target",
+    ".venv",
+    "venv",
+    "vendor",
+    "__pycache__",
+    "build",
+    "dist",
+    ".gradle",
+    "bin",
+    "obj",
+    "DerivedData",
+];
 
 pub struct DetectorResult {
     pub entries: Vec<BloatEntry>,

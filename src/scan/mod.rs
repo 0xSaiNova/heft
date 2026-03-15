@@ -165,6 +165,35 @@ pub fn run(config: &Config) -> ScanResult {
         scan_result.merge(result);
     }
 
+    // annotate entries with activity status
+    if let Some(ref sp) = spinner {
+        sp.set_message("Checking activity...");
+    }
+    let activity_results = crate::activity::check(&scan_result.entries, &config.activity);
+    for (i, ar) in activity_results.into_iter().enumerate() {
+        scan_result.entries[i].active = Some(ar.active);
+        scan_result.entries[i].active_reason = ar.reason;
+    }
+
+    // compute staleness scores
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let staleness_cfg = config.staleness.clone().unwrap_or_default();
+    for entry in &mut scan_result.entries {
+        entry.staleness_score = Some(if entry.active == Some(true) {
+            0.0
+        } else {
+            crate::staleness::compute_staleness(
+                entry.size_bytes,
+                entry.last_modified,
+                now,
+                &staleness_cfg,
+            )
+        });
+    }
+
     // Stop spinner before printing results
     if let Some(sp) = spinner {
         sp.stop();
