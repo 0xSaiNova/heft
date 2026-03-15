@@ -212,18 +212,27 @@ fn get_cache_locations(
         "go clean -modcache",
     ));
 
-    // VS Code extensions and cache
-    let vscode_path = match platform {
+    // VS Code cache directories only — not the entire config directory.
+    // ~/.config/Code contains user settings, keybindings, and snippets
+    // that are irreplaceable. only target the cache subdirectories.
+    let vscode_base = match platform {
         Platform::MacOS => home.join("Library/Application Support/Code"),
         Platform::Windows => home.join("AppData").join("Roaming").join("Code"),
         Platform::Linux | Platform::Unknown => home.join(".config/Code"),
     };
-    locations.push(CacheLocation::new(
-        "vscode data",
-        vscode_path,
-        BloatCategory::IdeData,
-        "clear from within vscode or delete unused extensions",
-    ));
+    for subdir in &[
+        "Cache",
+        "CachedData",
+        "CachedExtensions",
+        "CachedExtensionVSIXs",
+    ] {
+        locations.push(CacheLocation::new(
+            "vscode cache",
+            vscode_base.join(subdir),
+            BloatCategory::IdeData,
+            "safe to delete, vscode recreates on next launch",
+        ));
+    }
 
     // gradle cache — cross-platform dotfile path, same on all OSes
     locations.push(CacheLocation::new(

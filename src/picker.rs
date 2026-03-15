@@ -32,7 +32,8 @@ pub fn run_picker(
         selected[i] = crate::safety::should_preselect(e, include_active);
     }
 
-    let (_, term_rows) = terminal::size().unwrap_or((80, 24));
+    let (term_cols, term_rows) = terminal::size().unwrap_or((80, 24));
+    let max_width = term_cols as usize;
     // Reserve 2 lines for header and footer
     let visible = (term_rows as usize).saturating_sub(2).max(1);
 
@@ -62,22 +63,41 @@ pub fn run_picker(
         e.last_modified.map(|ts| ((now - ts) as f64) / 86400.0)
     };
 
+    // truncate a string to fit within the terminal width so wrapped lines
+    // never push the draw area past the reserved row count.
+    let truncate = |s: &str, width: usize| -> String {
+        if s.len() <= width {
+            s.to_string()
+        } else {
+            let mut t = s[..width.saturating_sub(1)].to_string();
+            t.push('…');
+            t
+        }
+    };
+
     let draw = |sel: &[bool],
                 cur: usize,
                 offset: usize,
                 anchor: u16,
                 out: &mut std::io::Stdout|
      -> std::io::Result<()> {
-        // always start from the saved anchor position
-        execute!(out, cursor::MoveTo(0, anchor))?;
+        // row tracks the absolute terminal row for each line.
+        // using MoveTo instead of \n\r prevents the terminal from scrolling
+        // when the picker sits near the bottom of the screen.
+        let mut row = anchor;
 
         // Header
+        let header = truncate(
+            "  Select items to clean (space: toggle, a: all stale, n: none, enter: go)",
+            max_width,
+        );
         execute!(
             out,
-            Print("  Select items to clean (space: toggle, a: all stale, n: none, enter: go)"),
+            cursor::MoveTo(0, row),
+            Print(&header),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
-            Print("\n\r"),
         )?;
+        row += 1;
 
         let end = (offset + visible).min(count);
         for i in offset..end {
@@ -88,6 +108,7 @@ pub fn run_picker(
             let label = staleness_label(e.active, age_days_for(e));
             let prefix = if i == cur { ">" } else { " " };
 
+            execute!(out, cursor::MoveTo(0, row))?;
             if i == cur {
                 execute!(out, SetAttribute(Attribute::Bold))?;
             }
@@ -95,23 +116,24 @@ pub fn run_picker(
                 "{prefix} [{check}]  {size_str:>10}  {name:<30}  {path}  {label}",
                 name = e.name
             );
-            execute!(out, Print(&line), SetAttribute(Attribute::Reset))?;
-
-            // Clear rest of line and move to next
+            let line = truncate(&line, max_width);
             execute!(
                 out,
+                Print(&line),
+                SetAttribute(Attribute::Reset),
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
-                Print("\n\r"),
             )?;
+            row += 1;
         }
 
         // Clear any leftover lines if the list shrank
         for _ in end..(offset + visible) {
             execute!(
                 out,
+                cursor::MoveTo(0, row),
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::CurrentLine),
-                Print("\n\r"),
             )?;
+            row += 1;
         }
 
         // Footer with running total
@@ -122,13 +144,17 @@ pub fn run_picker(
             .filter(|(&s, _)| s)
             .map(|(_, e)| e.reclaimable_bytes)
             .sum();
-        let footer = format!(
-            "  Selected: {} ({} items)  |  enter: confirm  q: cancel",
-            format_bytes(sel_bytes),
-            sel_count
+        let footer = truncate(
+            &format!(
+                "  Selected: {} ({} items)  |  enter: confirm  q: cancel",
+                format_bytes(sel_bytes),
+                sel_count
+            ),
+            max_width,
         );
         execute!(
             out,
+            cursor::MoveTo(0, row),
             Print(&footer),
             crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine),
         )?;

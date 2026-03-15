@@ -113,7 +113,15 @@ pub fn run_default(cli: &Cli, config: Config) {
             }
         }
         "i" => {
-            let picked = crate::picker::run_picker(&result.entries, cli.include_active);
+            // only show entries that are actually deletable in the picker.
+            // informational entries like WSL2 vhdx disks have reclaimable_bytes == 0.
+            let cleanable: Vec<_> = result
+                .entries
+                .iter()
+                .filter(|e| e.reclaimable_bytes > 0)
+                .cloned()
+                .collect();
+            let picked = crate::picker::run_picker(&cleanable, cli.include_active);
             if !picked.is_empty() {
                 confirm_and_clean(picked, cli.include_active);
             }

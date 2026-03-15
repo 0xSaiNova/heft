@@ -36,9 +36,16 @@ pub struct DiffResult {
 }
 
 /// Create a unique key for matching entries across snapshots.
-/// Uses category + name since paths can change.
+/// Uses category + name + location so entries with the same name
+/// at different paths (e.g. multiple "launchpad" node_modules)
+/// are tracked individually.
 fn make_key(entry: &BloatEntry) -> String {
-    format!("{}:{}", entry.category.as_str(), entry.name)
+    let loc = match &entry.location {
+        crate::scan::detector::Location::FilesystemPath(p) => p.display().to_string(),
+        crate::scan::detector::Location::DockerObject(s) => s.clone(),
+        crate::scan::detector::Location::Aggregate(s) => s.clone(),
+    };
+    format!("{}:{}:{}", entry.category.as_str(), entry.name, loc)
 }
 
 /// Compare two sets of entries and produce diff entries

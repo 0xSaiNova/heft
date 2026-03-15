@@ -66,6 +66,11 @@ pub fn run(result: &ScanResult, mode: CleanMode, opts: CleanOptions) -> CleanRes
             if opts.stale_only && entry.staleness_score.unwrap_or(0.0) <= 0.0 {
                 return false;
             }
+            // skip entries marked as informational-only (e.g. WSL2 vhdx disks).
+            // these are useful in scan output but should never be in the clean path.
+            if entry.reclaimable_bytes == 0 {
+                return false;
+            }
             true
         })
         .collect();
