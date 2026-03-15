@@ -272,10 +272,12 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
         }
     }
 
-    // allow /tmp and its subdirectories on unix-like systems
+    // allow /tmp and its subdirectories on unix-like systems.
+    // on macOS /tmp is a symlink to /private/tmp so tempfile paths
+    // resolve to /private/tmp/... which doesn't start with /tmp.
     #[cfg(unix)]
     {
-        if path.starts_with("/tmp") {
+        if path.starts_with("/tmp") || path.starts_with("/private/tmp") {
             return Ok(());
         }
     }

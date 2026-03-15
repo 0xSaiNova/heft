@@ -76,6 +76,7 @@ fn clean_git_project_is_rebuildable() {
         .output()
         .unwrap();
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+    fs::write(root.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
     std::process::Command::new("git")
         .args(["add", "."])
         .current_dir(root)
@@ -113,6 +114,7 @@ fn dirty_git_project_is_caution() {
         .output()
         .unwrap();
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+    fs::write(root.join(".gitignore"), "target/\n").unwrap();
     std::process::Command::new("git")
         .args(["add", "."])
         .current_dir(root)
@@ -124,7 +126,7 @@ fn dirty_git_project_is_caution() {
         .output()
         .unwrap();
 
-    // make it dirty
+    // make it dirty with one uncommitted file
     fs::write(root.join("uncommitted.txt"), "dirty").unwrap();
 
     let target = root.join("target");
@@ -171,6 +173,7 @@ fn classify_all_deduplicates_git_checks() {
         .output()
         .unwrap();
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
+    fs::write(root.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
     std::process::Command::new("git")
         .args(["add", "."])
         .current_dir(root)
