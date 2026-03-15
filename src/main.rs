@@ -316,6 +316,7 @@ fn main() {
                             heft::scan::detector::BloatCategory::SystemCache
                         }
                         CleanCategory::Other => heft::scan::detector::BloatCategory::Other,
+                        CleanCategory::LargeFile => heft::scan::detector::BloatCategory::LargeFile,
                     })
                     .collect()
             });

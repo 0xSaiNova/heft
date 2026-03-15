@@ -100,6 +100,8 @@ pub enum CleanCategory {
     SystemCache,
     #[value(name = "other")]
     Other,
+    #[value(name = "large-file")]
+    LargeFile,
 }
 
 #[derive(Parser)]
