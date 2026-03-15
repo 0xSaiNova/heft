@@ -412,48 +412,10 @@ fn extract_toml_package_name(content: &str) -> Option<String> {
 }
 
 // finds the most recent modification time of source files in a project.
-// used to identify stale projects that havent been touched in a while.
+// delegates to activity::mtime which does a breadth-first walk with the same
+// artifact skip list and source extension checks.
 fn get_source_last_modified(project_root: &Path) -> Option<i64> {
-    let mut latest: Option<SystemTime> = None;
-
-    // only check top few levels, dont need to go deep.
-    // filter_entry prunes descent into artifact directories entirely, not just
-    // skips their entry. using continue here would skip the entry but still
-    // let walkdir descend into it (scanning thousands of files for nothing).
-    for entry in WalkDir::new(project_root)
-        .max_depth(3)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            if !e.file_type().is_dir() {
-                return true;
-            }
-            e.file_name()
-                .to_str()
-                .map(|s| !super::detector::ARTIFACT_DIR_NAMES.contains(&s))
-                .unwrap_or(true)
-        })
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            let is_source = entry
-                .path()
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|ext| super::detector::SOURCE_EXTENSIONS.contains(&ext))
-                .unwrap_or(false);
-
-            if is_source {
-                if let Ok(metadata) = entry.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        latest = Some(latest.map_or(modified, |l| l.max(modified)));
-                    }
-                }
-            }
-        }
-    }
-
-    latest
+    crate::activity::mtime::latest_source_mtime(project_root, 200)
         .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
 }

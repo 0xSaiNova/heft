@@ -8,7 +8,7 @@ pub mod categories;
 pub mod export;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use categories::{AuditCategory, CustomRule};
@@ -66,6 +66,13 @@ pub struct AuditResult {
     pub top_dirs: Vec<(PathBuf, u64, AuditCategory)>,
 }
 
+/// Pseudo-filesystems that should always be skipped during audit.
+const SKIP_PATHS: &[&str] = &["/proc", "/sys", "/dev", "/run"];
+
+fn should_skip_path(path: &Path) -> bool {
+    SKIP_PATHS.iter().any(|p| path.starts_with(p))
+}
+
 /// Run a full disk audit.
 pub fn run(config: &AuditConfig) -> AuditResult {
     let start = std::time::Instant::now();
@@ -79,12 +86,38 @@ pub fn run(config: &AuditConfig) -> AuditResult {
     let mut dir_sizes: HashMap<PathBuf, (u64, AuditCategory)> = HashMap::new();
 
     for root in &config.roots {
+        // get the root device ID for mount boundary filtering
+        #[cfg(unix)]
+        let root_dev = if !config.cross_mount {
+            use std::os::unix::fs::MetadataExt;
+            std::fs::metadata(root).ok().map(|m| m.dev())
+        } else {
+            None
+        };
+
         let walker = jwalk::WalkDir::new(root).follow_links(false).sort(true);
 
         for entry in walker {
             match entry {
                 Ok(entry) => {
                     let path = entry.path();
+
+                    // skip pseudo-filesystems (always, regardless of --cross-mount)
+                    if should_skip_path(&path) {
+                        continue;
+                    }
+
+                    // skip entries on different filesystems unless --cross-mount
+                    #[cfg(unix)]
+                    if let Some(root_dev) = root_dev {
+                        if let Ok(meta) = entry.metadata() {
+                            use std::os::unix::fs::MetadataExt;
+                            if meta.dev() != root_dev {
+                                continue;
+                            }
+                        }
+                    }
+
                     let file_type = entry.file_type;
 
                     if file_type.is_file() {
@@ -119,7 +152,7 @@ pub fn run(config: &AuditConfig) -> AuditResult {
                 Err(e) => {
                     let msg = e.to_string();
                     if msg.contains("Permission denied") {
-                        inaccessible_bytes += 4096; // approximate dir entry size
+                        inaccessible_bytes += 4096;
                     }
                     errors.push(msg);
                 }

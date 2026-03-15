@@ -113,28 +113,28 @@ pub fn export_json(result: &AuditResult, writer: &mut impl Write) -> Result<(), 
         .map_err(|e| format!("JSON serialization failed: {e}"))
 }
 
-/// Export audit results as CSV.
+/// Export audit results as CSV with per-item rows from top_dirs.
+/// Category summary is included as comment lines at the top.
 pub fn export_csv(result: &AuditResult, writer: &mut impl Write) -> Result<(), String> {
-    writeln!(writer, "category,size_bytes,percentage")
-        .map_err(|e| format!("CSV write failed: {e}"))?;
-
+    // category summary as comments
     let mut categories: Vec<_> = result.by_category.iter().collect();
     categories.sort_by(|a, b| b.1.cmp(a.1));
 
-    for (category, size) in categories {
+    writeln!(writer, "# category,bytes,percentage")
+        .map_err(|e| format!("CSV write failed: {e}"))?;
+    for (category, size) in &categories {
         let pct = if result.total_bytes > 0 {
-            (*size as f64 / result.total_bytes as f64) * 100.0
+            (**size as f64 / result.total_bytes as f64) * 100.0
         } else {
             0.0
         };
-        writeln!(writer, "{},{},{:.2}", category.label(), size, pct)
+        writeln!(writer, "# {},{},{:.1}%", category.label(), size, pct)
             .map_err(|e| format!("CSV write failed: {e}"))?;
     }
 
-    // top dirs section
-    writeln!(writer).map_err(|e| format!("CSV write failed: {e}"))?;
-    writeln!(writer, "path,size_bytes,category").map_err(|e| format!("CSV write failed: {e}"))?;
-    for (path, size, cat) in result.top_dirs.iter().take(20) {
+    // per-item rows from top_dirs
+    writeln!(writer, "path,bytes,category").map_err(|e| format!("CSV write failed: {e}"))?;
+    for (path, size, cat) in &result.top_dirs {
         writeln!(
             writer,
             "{},{},{}",
