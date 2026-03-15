@@ -1,8 +1,28 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use heft::safety::{self, SafetyInfo, SafetyTier};
 use heft::scan::detector::{BloatCategory, BloatEntry, Location};
+
+/// run a git command in a directory, with user config set so it works on CI
+fn git(dir: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_AUTHOR_NAME", "test")
+        .env("GIT_AUTHOR_EMAIL", "test@test.com")
+        .env("GIT_COMMITTER_NAME", "test")
+        .env("GIT_COMMITTER_EMAIL", "test@test.com")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
 
 fn entry_with_category(category: BloatCategory, path: &str) -> BloatEntry {
     BloatEntry {
@@ -70,23 +90,11 @@ fn clean_git_project_is_rebuildable() {
         .unwrap();
     let root = tmp.path();
 
-    std::process::Command::new("git")
-        .args(["init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["init"]);
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
     fs::write(root.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
-    std::process::Command::new("git")
-        .args(["add", "."])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    std::process::Command::new("git")
-        .args(["commit", "-m", "init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "init"]);
 
     let target = root.join("target");
     fs::create_dir(&target).unwrap();
@@ -108,23 +116,11 @@ fn dirty_git_project_is_caution() {
         .unwrap();
     let root = tmp.path();
 
-    std::process::Command::new("git")
-        .args(["init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["init"]);
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
     fs::write(root.join(".gitignore"), "target/\n").unwrap();
-    std::process::Command::new("git")
-        .args(["add", "."])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    std::process::Command::new("git")
-        .args(["commit", "-m", "init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "init"]);
 
     // make it dirty with one uncommitted file
     fs::write(root.join("uncommitted.txt"), "dirty").unwrap();
@@ -167,23 +163,11 @@ fn classify_all_deduplicates_git_checks() {
         .unwrap();
     let root = tmp.path();
 
-    std::process::Command::new("git")
-        .args(["init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["init"]);
     fs::write(root.join("main.rs"), "fn main() {}").unwrap();
     fs::write(root.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
-    std::process::Command::new("git")
-        .args(["add", "."])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    std::process::Command::new("git")
-        .args(["commit", "-m", "init"])
-        .current_dir(root)
-        .output()
-        .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "init"]);
 
     let target = root.join("target");
     let node_modules = root.join("node_modules");

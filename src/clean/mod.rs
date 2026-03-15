@@ -272,25 +272,19 @@ fn validate_deletion_path(path: &Path) -> Result<(), String> {
         }
     }
 
-    // allow /tmp and its subdirectories on unix-like systems.
-    // on macOS /tmp is a symlink to /private/tmp so tempfile paths
-    // resolve to /private/tmp/... which doesn't start with /tmp.
+    // allow the OS temp directory. std::env::temp_dir() returns the
+    // platform native temp path ($TMPDIR on macOS which is /var/folders/...,
+    // %TEMP% on Windows, /tmp on most Linux).
+    let tmp = std::env::temp_dir();
+    if path.starts_with(&tmp) {
+        return Ok(());
+    }
+
+    // hardcoded fallbacks for unix where $TMPDIR may not match /tmp
     #[cfg(unix)]
     {
         if path.starts_with("/tmp") || path.starts_with("/private/tmp") {
             return Ok(());
-        }
-    }
-
-    // allow Windows temp directories
-    #[cfg(windows)]
-    {
-        if let Some(temp) = std::env::var_os("TEMP").or_else(|| std::env::var_os("TMP")) {
-            use std::path::PathBuf;
-            let temp_path = PathBuf::from(temp);
-            if path.starts_with(&temp_path) {
-                return Ok(());
-            }
         }
     }
 
