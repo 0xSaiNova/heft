@@ -5,6 +5,7 @@ pub mod clean;
 
 pub mod cli;
 pub mod config;
+pub mod default;
 pub mod platform;
 pub mod report;
 pub mod scan;

@@ -146,8 +146,8 @@ fn main() {
 
     match cli.command {
         None => {
-            eprintln!("Default flow not yet implemented.");
-            std::process::exit(1);
+            let config = Config::from_bare_cli(cli.root.clone());
+            heft::default::run_default(&cli, config);
         }
         Some(Command::Scan(args)) => {
             let config = Config::from_scan_args(&args);

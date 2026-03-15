@@ -209,6 +209,24 @@ impl Config {
         !self.disabled_detectors.contains(name)
     }
 
+    pub fn from_bare_cli(roots: Option<Vec<PathBuf>>) -> Self {
+        let file = load_file_config().unwrap_or_default();
+        let platform = platform::detect();
+        let roots =
+            roots.unwrap_or_else(|| platform::home_dir().map(|h| vec![h]).unwrap_or_default());
+        Config {
+            roots,
+            timeout: Duration::from_secs(file.scan.timeout.unwrap_or(30)),
+            disabled_detectors: disabled_from_file(&file.detectors),
+            json_output: false,
+            verbose: false,
+            progressive: false,
+            platform,
+            activity: build_activity_config(&file.activity),
+            staleness: None,
+        }
+    }
+
     pub fn from_scan_args(args: &ScanArgs) -> Self {
         let file = load_file_config().unwrap_or_default();
         Self::merge_scan(args, &file)
