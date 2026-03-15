@@ -56,11 +56,17 @@ pub fn render(result: &ScanResult) -> String {
             } else {
                 ""
             };
+            let safety_tag = entry
+                .safety
+                .as_ref()
+                .map(|s| format!(" [{}]", s.tier.label()))
+                .unwrap_or_default();
             output.push_str(&format!(
-                "  {:30} {:>10}{}\n",
+                "  {:30} {:>10}{}{}\n",
                 truncate(&entry.name, 30),
                 format_bytes(entry.size_bytes),
-                active_tag
+                active_tag,
+                safety_tag,
             ));
         }
 

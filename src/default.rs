@@ -90,7 +90,13 @@ pub fn run_default(cli: &Cli, config: Config) {
     }
 
     // interactive prompt
-    summary::print_prompt();
+    let auto_cleanable: u64 = result
+        .entries
+        .iter()
+        .filter(|e| crate::safety::should_preselect(e, cli.include_active))
+        .map(|e| e.reclaimable_bytes)
+        .sum();
+    summary::print_prompt(auto_cleanable);
     let key = read_key();
     match key.as_str() {
         "a" => {

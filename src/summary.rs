@@ -63,9 +63,25 @@ pub fn print_summary(entries: &[BloatEntry]) {
             names.join(", ")
         );
     }
+
+    let auto_cleanable: u64 = entries
+        .iter()
+        .filter(|e| crate::safety::should_preselect(e, false))
+        .map(|e| e.reclaimable_bytes)
+        .sum();
+    if auto_cleanable > 0 {
+        println!("  Auto-cleanable: {}", format_bytes(auto_cleanable));
+    }
     println!();
 }
 
-pub fn print_prompt() {
-    println!("  [i] Pick items to clean  [a] Clean all stale  [q] Quit");
+pub fn print_prompt(auto_cleanable: u64) {
+    if auto_cleanable > 0 {
+        println!(
+            "  [i] Pick items  [a] Auto-clean {}  [q] Quit",
+            format_bytes(auto_cleanable)
+        );
+    } else {
+        println!("  [i] Pick items  [q] Quit");
+    }
 }
