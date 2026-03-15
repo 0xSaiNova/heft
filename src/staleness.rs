@@ -75,18 +75,28 @@ mod tests {
     }
 
     #[test]
-    fn dormant_uses_default_factor() {
+    fn very_old_uses_default_factor() {
+        // default_factor applies when age exceeds all brackets
         let cfg = StalenessConfig {
             brackets: vec![StalenessBracket {
                 days: 7,
-                factor: 0.0,
+                factor: 1.0,
             }],
             default_factor: 5.0,
         };
         let now = 100_000_000;
-        // 1 day old, below the only bracket at 7 days, so default_factor applies
-        let score = compute_staleness(100, Some(now - DAY), now, &cfg);
+        // 3 days old, below the 7 day bracket, no match, default_factor fires
+        let score = compute_staleness(100, Some(now - 3 * DAY), now, &cfg);
         assert_eq!(score, 500.0);
+    }
+
+    #[test]
+    fn fresh_items_under_first_bracket_score_zero() {
+        let cfg = default_cfg();
+        let now = 100_000_000;
+        // 3 days old, hits the 0 day bracket (factor 0.0)
+        let score = compute_staleness(1000, Some(now - 3 * DAY), now, &cfg);
+        assert_eq!(score, 0.0);
     }
 
     #[test]

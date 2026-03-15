@@ -70,6 +70,8 @@ struct FileConfig {
     activity: FileActivityConfig,
     #[serde(default)]
     audit: FileAuditConfig,
+    #[serde(default)]
+    staleness: Option<StalenessConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -88,6 +90,10 @@ impl Default for StalenessConfig {
     fn default() -> Self {
         StalenessConfig {
             brackets: vec![
+                StalenessBracket {
+                    days: 0,
+                    factor: 0.0,
+                },
                 StalenessBracket {
                     days: 7,
                     factor: 0.0,
@@ -223,7 +229,7 @@ impl Config {
             progressive: false,
             platform,
             activity: build_activity_config(&file.activity),
-            staleness: None,
+            staleness: file.staleness.clone(),
         }
     }
 
@@ -286,7 +292,7 @@ impl Config {
             progressive,
             platform,
             activity: build_activity_config(&file.activity),
-            staleness: None,
+            staleness: file.staleness.clone(),
         }
     }
 
@@ -326,7 +332,7 @@ impl Config {
             progressive: file.scan.progressive.unwrap_or(false),
             platform,
             activity: build_activity_config(&file.activity),
-            staleness: None,
+            staleness: file.staleness.clone(),
         }
     }
 }
